@@ -2,10 +2,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
-use bdk_coin_select::metrics::LowestFee;
-use bdk_coin_select::{
-    Candidate, ChangePolicy, CoinSelector, Drain, DrainWeights, Target, TargetFee, TargetOutputs,
-};
+use bitcoin_coin_selection::{select_coins, WeightedUtxo};
+
 use bitcoin::hashes::Hash;
 use bitcoin::key::TweakedPublicKey;
 use bitcoin::secp256k1::rand::seq::SliceRandom;
@@ -170,10 +168,26 @@ impl Wallet {
     }
 }
 
+pub struct Utxo {
+    value: Amount,
+    outpoint: OutPoint, 
+}
+
+impl WeightedUtxo for Utxo {
+    fn satisfaction_weight(&self) -> Weight {
+        // TR Weight
+        Weight::ZERO
+    }
+
+    fn value(&self) -> Amount {
+        Amount::ZERO
+    }
+}
+
 fn build_transaction(
     spend_secret: &SecretKey,
     recipient: Recipient,
-    amount: Amount,
+    target_amount: Amount,
     fee_rate: FeeRate,
     tip_height: u32,
     change_address: SilentPaymentAddress,
@@ -182,90 +196,17 @@ fn build_transaction(
     if coins.is_empty() {
         return Err(SendError::NoSpendableCoins);
     }
-    let secp = Secp256k1::signing_only();
 
-    let recipient_script = match &recipient {
-        Recipient::Address(address) => Some(address.script_pubkey()),
-        Recipient::SilentPayment(_) => None,
-    };
-    let recipient_dust = match &recipient_script {
-        Some(spk) => spk.minimal_non_dust(),
-        None => p2tr_dust(spend_secret, &secp),
-    };
-    if amount < recipient_dust {
-        return Err(SendError::DustAmount {
-            amount,
-            dust: recipient_dust,
-        });
-    }
-    let change_dust = p2tr_dust(spend_secret, &secp);
-    let recipient_weight = match &recipient_script {
-        Some(spk) => output_weight(spk.len()).to_wu(),
-        None => DrainWeights::TR_KEYSPEND.output_weight,
-    };
-
-    let feerate = cs_feerate(fee_rate);
-    let target = Target {
-        fee: TargetFee::from_feerate(feerate),
-        outputs: TargetOutputs::fund_outputs([(recipient_weight, amount.to_sat())]),
-    };
-    let change_policy = ChangePolicy::min_value_and_waste(
-        DrainWeights::TR_KEYSPEND,
-        change_dust.to_sat(),
-        feerate,
-        bdk_coin_select::FeeRate::from_sat_per_vb(LONG_TERM_FEERATE_SAT_PER_VB),
-    );
-
-    let (mut selected, drain) = select_coins(coins, target, change_policy, 100_000)?;
-    let mut rng = bitcoin::secp256k1::rand::thread_rng();
-    selected.shuffle(&mut rng);
-
-    let signing_keys: Vec<SecretKey> = selected
+    let utxos: Vec<Utxo> = coins 
         .iter()
-        .map(|c| spend_secret.add_tweak(&c.coin.tweak))
-        .collect::<Result<_, secp256k1::Error>>()?;
+        .map(|c| Utxo { value: c.coin.value, outpoint: c.outpoint } )
+        .collect();
 
-    let change_value = drain.is_some().then(|| Amount::from_sat(drain.value));
-    let recipient_is_sp = matches!(recipient, Recipient::SilentPayment(_));
-    let derived: HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>> = if recipient_is_sp
-        || change_value.is_some()
-    {
-        // true marks each key as taproot since every silent payment coin is a P2TR output
-        let input_keys: Vec<(SecretKey, bool)> = signing_keys.iter().map(|k| (*k, true)).collect();
-        let outpoints: Vec<(String, u32)> = selected
-            .iter()
-            .map(|c| (c.outpoint.txid.to_string(), c.outpoint.vout))
-            .collect();
-        let partial_secret = calculate_partial_secret(&input_keys, &outpoints)?;
-        let mut sp_addrs = Vec::new();
-        if let Recipient::SilentPayment(sp) = &recipient {
-            sp_addrs.push(*sp);
-        }
-        if change_value.is_some() {
-            sp_addrs.push(change_address);
-        }
-        generate_recipient_pubkeys(sp_addrs, partial_secret)?
-    } else {
-        HashMap::new()
-    };
+    // TODO
+    let cost_of_change = Amount::ZERO;
+    let (i, matches) = select_coins(target_amount, cost_of_change, fee_rate, fee_rate, &utxos).unwrap();
 
-    let recipient_script = match recipient {
-        Recipient::Address(address) => address.script_pubkey(),
-        Recipient::SilentPayment(sp) => sp_output_script(&derived, sp)?,
-    };
-    let mut output = vec![TxOut {
-        value: amount,
-        script_pubkey: recipient_script,
-    }];
-    if let Some(value) = change_value {
-        output.push(TxOut {
-            value,
-            script_pubkey: sp_output_script(&derived, change_address)?,
-        });
-    }
-    output.shuffle(&mut rng);
-
-    let input: Vec<TxIn> = selected
+    let input: Vec<TxIn> = matches 
         .iter()
         .map(|c| TxIn {
             previous_output: c.outpoint,
@@ -279,80 +220,10 @@ fn build_transaction(
         version: Version::TWO,
         lock_time: LockTime::from_height(tip_height).unwrap_or(LockTime::ZERO),
         input,
-        output,
+        output: vec![],
     };
-
-    let prevouts: Vec<TxOut> = selected
-        .iter()
-        .map(|c| TxOut {
-            value: c.coin.value,
-            script_pubkey: c.coin.script_pubkey.clone(),
-        })
-        .collect();
-
-    debug_assert_eq!(signing_keys.len(), prevouts.len());
-    let mut cache = SighashCache::new(&tx);
-    let mut witnesses = Vec::with_capacity(selected.len());
-    for (i, signing_key) in signing_keys.iter().enumerate() {
-        let sighash = cache.taproot_key_spend_signature_hash(
-            i,
-            &Prevouts::All(&prevouts),
-            TapSighashType::Default,
-        )?;
-        let keypair = Keypair::from_secret_key(&secp, signing_key);
-        let message = Message::from_digest(sighash.to_byte_array());
-        let signature = secp.sign_schnorr_no_aux_rand(&message, &keypair);
-        let sig = taproot::Signature {
-            signature,
-            sighash_type: TapSighashType::Default,
-        };
-        witnesses.push(Witness::from_slice(&[sig.serialize()]));
-    }
-    for (txin, witness) in tx.input.iter_mut().zip(witnesses) {
-        txin.witness = witness;
-    }
 
     Ok(tx)
-}
-
-fn select_coins<'a, 'c>(
-    coins: &'c [SpendableCoin<'a>],
-    target: Target,
-    change_policy: ChangePolicy,
-    max_bnb_rounds: usize,
-) -> Result<(Vec<&'c SpendableCoin<'a>>, Drain), SendError> {
-    let spendable: Vec<&SpendableCoin> = coins.iter().collect();
-    let candidates: Vec<Candidate> = spendable
-        .iter()
-        .map(|c| Candidate::new_tr_keyspend(c.coin.value.to_sat()))
-        .collect();
-
-    let mut selector = CoinSelector::new(&candidates);
-    let metric = LowestFee {
-        target,
-        long_term_feerate: bdk_coin_select::FeeRate::from_sat_per_vb(LONG_TERM_FEERATE_SAT_PER_VB),
-        change_policy,
-    };
-    if selector.run_bnb(metric, max_bnb_rounds).is_err() {
-        selector.sort_candidates_by_descending_value_pwu();
-        selector.select_until_target_met(target).map_err(|e| {
-            let available = coins
-                .iter()
-                .map(|c| c.coin.value.to_sat())
-                .fold(0u64, u64::saturating_add);
-            SendError::InsufficientFunds {
-                needed: Amount::from_sat(available.saturating_add(e.missing)),
-                available: Amount::from_sat(available),
-            }
-        })?;
-    }
-    let drain = selector.drain(target, change_policy);
-    let selected = selector.apply_selection(&spendable).copied().collect();
-    Ok((selected, drain))
-}
-
-fn cs_feerate(fee_rate: FeeRate) -> bdk_coin_select::FeeRate {
-    bdk_coin_select::FeeRate::from_sat_per_wu(fee_rate.to_sat_per_kwu() as f32 / 1000.0)
 }
 
 fn output_weight(script_len: usize) -> Weight {
@@ -373,11 +244,6 @@ fn sp_output_script(
 
 fn p2tr_script(output_key: XOnlyPublicKey) -> ScriptBuf {
     ScriptBuf::new_p2tr_tweaked(TweakedPublicKey::dangerous_assume_tweaked(output_key))
-}
-
-fn p2tr_dust(spend_secret: &SecretKey, secp: &Secp256k1<secp256k1::SignOnly>) -> Amount {
-    let probe = spend_secret.x_only_public_key(secp).0;
-    p2tr_script(probe).minimal_non_dust()
 }
 
 #[cfg(test)]
