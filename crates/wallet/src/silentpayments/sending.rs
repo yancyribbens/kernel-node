@@ -180,7 +180,7 @@ impl WeightedUtxo for Utxo {
     }
 
     fn value(&self) -> Amount {
-        Amount::ZERO
+        self.value
     }
 }
 
@@ -216,11 +216,31 @@ fn build_transaction(
         })
         .collect();
 
+    let matches_sum: Amount = matches.iter().map(|u| u.value()).sum();
+    assert!(matches_sum >= target_amount);
+    let change: Amount = matches_sum - target_amount;
+
+    let derived: HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>> = HashMap::new();
+
+    let recipient_script = match recipient {
+        Recipient::Address(address) => address.script_pubkey(),
+        Recipient::SilentPayment(sp) => sp_output_script(&derived, sp)?,
+    };
+
+    let mut output = vec![];
+    if change > cost_of_change {
+        let mut change_output = TxOut {
+            value: change,
+            script_pubkey: recipient_script,
+        };
+        output.push(change_output);
+    }
+
     let mut tx = Transaction {
         version: Version::TWO,
         lock_time: LockTime::from_height(tip_height).unwrap_or(LockTime::ZERO),
         input,
-        output: vec![],
+        output,
     };
 
     Ok(tx)
