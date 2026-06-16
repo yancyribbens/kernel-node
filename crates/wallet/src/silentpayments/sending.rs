@@ -171,11 +171,12 @@ impl Wallet {
 pub struct Utxo {
     value: Amount,
     outpoint: OutPoint, 
+    tweak: crate::silentpayments::secp256k1::Scalar,
 }
 
 impl WeightedUtxo for Utxo {
     fn satisfaction_weight(&self) -> Weight {
-        // TR Weight
+        // TODO get TR Weight
         Weight::ZERO
     }
 
@@ -199,14 +200,15 @@ fn build_transaction(
 
     let utxos: Vec<Utxo> = coins 
         .iter()
-        .map(|c| Utxo { value: c.coin.value, outpoint: c.outpoint } )
+        .map(|c| Utxo { value: c.coin.value, outpoint: c.outpoint, tweak: c.coin.tweak } )
         .collect();
 
     // TODO
     let cost_of_change = Amount::ZERO;
-    let (i, matches) = select_coins(target_amount, cost_of_change, fee_rate, fee_rate, &utxos).unwrap();
+    let (_i, utxo_selection) =
+        select_coins(target_amount, cost_of_change, fee_rate, fee_rate, &utxos).unwrap();
 
-    let input: Vec<TxIn> = matches 
+    let input: Vec<TxIn> = utxo_selection
         .iter()
         .map(|c| TxIn {
             previous_output: c.outpoint,
@@ -216,8 +218,14 @@ fn build_transaction(
         })
         .collect();
 
-    let matches_sum: Amount = matches.iter().map(|u| u.value()).sum();
-    assert!(matches_sum >= target_amount);
+    let signing_keys: Vec<SecretKey> = utxo_selection
+        .iter()
+        .map(|c| spend_secret.add_tweak(&c.tweak))
+        .collect::<Result<_, secp256k1::Error>>()?;
+
+    let matches_sum: Amount = utxo_selection.iter().map(|u| u.value()).sum();
+    debug_assert!(matches_sum >= target_amount);
+
     let change: Amount = matches_sum - target_amount;
 
     let derived: HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>> = HashMap::new();
@@ -228,12 +236,30 @@ fn build_transaction(
     };
 
     let mut output = vec![];
+
+    let recipient_output = TxOut {
+        value: target_amount,
+        script_pubkey: recipient_script
+    };
+
+    output.push(recipient_output);
+
     if change > cost_of_change {
-        let mut change_output = TxOut {
+        let change_output = TxOut {
             value: change,
-            script_pubkey: recipient_script,
+            script_pubkey: sp_output_script(&derived, change_address)?
         };
         output.push(change_output);
+
+        // true marks each key as taproot since every silent payment coin is a P2TR output
+        let input_keys: Vec<(SecretKey, bool)> = signing_keys.iter().map(|k| (*k, true)).collect();
+
+        let outpoints: Vec<(String, u32)> = utxo_selection
+            .iter()
+            .map(|c| (c.outpoint.txid.to_string(), c.outpoint.vout))
+            .collect();
+
+        let partial_secret = calculate_partial_secret(&input_keys, &outpoints)?;
     }
 
     let mut tx = Transaction {
@@ -244,11 +270,6 @@ fn build_transaction(
     };
 
     Ok(tx)
-}
-
-fn output_weight(script_len: usize) -> Weight {
-    // 8-byte value, 1-byte length prefix, then the script, times 4 weight units per byte.
-    Weight::from_wu_usize((8 + 1 + script_len) * 4)
 }
 
 fn sp_output_script(
