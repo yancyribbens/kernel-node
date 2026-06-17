@@ -2,11 +2,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
-use bitcoin_coin_selection::{single_random_draw, branch_and_bound, WeightedUtxo};
+use bitcoin_coin_selection::{single_random_draw, WeightedUtxo};
 
 use bitcoin::hashes::Hash;
 use bitcoin::key::TweakedPublicKey;
-use bitcoin::secp256k1::rand::seq::SliceRandom;
 use bitcoin::secp256k1::{self, Keypair, Message, Secp256k1, SecretKey, XOnlyPublicKey};
 use bitcoin::sighash::{Prevouts, SighashCache, TapSighashType};
 use bitcoin::transaction::Version;
@@ -19,8 +18,6 @@ use silentpayments::utils::sending::calculate_partial_secret;
 use silentpayments::{Network, SilentPaymentAddress};
 
 use crate::silentpayments::wallet::{Coin, Wallet};
-
-const LONG_TERM_FEERATE_SAT_PER_VB: f32 = 1.0;
 
 #[derive(Debug)]
 pub enum SendError {
@@ -172,6 +169,7 @@ pub struct Utxo {
     value: Amount,
     outpoint: OutPoint, 
     tweak: crate::silentpayments::secp256k1::Scalar,
+    script_pubkey: ScriptBuf, 
 }
 
 impl WeightedUtxo for Utxo {
@@ -200,7 +198,12 @@ fn build_transaction(
 
     let utxos: Vec<Utxo> = coins 
         .iter()
-        .map(|c| Utxo { value: c.coin.value, outpoint: c.outpoint, tweak: c.coin.tweak } )
+        .map(|c| Utxo {
+            value: c.coin.value,
+            outpoint: c.outpoint,
+            tweak: c.coin.tweak,
+            script_pubkey: c.coin.script_pubkey.clone()
+        })
         .collect();
 
     let (_i, utxo_selection) =
@@ -216,39 +219,24 @@ fn build_transaction(
         })
         .collect();
 
+    let matches_sum: Amount = utxo_selection.iter().map(|u| u.value()).sum();
+    debug_assert!(matches_sum >= target_amount);
+
+
+
+    let secp = Secp256k1::signing_only();
+    // L223
     let signing_keys: Vec<SecretKey> = utxo_selection
         .iter()
         .map(|c| spend_secret.add_tweak(&c.tweak))
         .collect::<Result<_, secp256k1::Error>>()?;
 
-    let matches_sum: Amount = utxo_selection.iter().map(|u| u.value()).sum();
-    debug_assert!(matches_sum >= target_amount);
+    let change_value: Amount = matches_sum - target_amount;
 
-    let change: Amount = matches_sum - target_amount;
-
-    let derived: HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>> = HashMap::new();
-
-    let recipient_script = match recipient {
-        Recipient::Address(address) => address.script_pubkey(),
-        Recipient::SilentPayment(sp) => sp_output_script(&derived, sp)?,
-    };
-
+    let mut derived: HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>> = HashMap::new();
     let mut output = vec![];
-
-    let recipient_output = TxOut {
-        value: target_amount,
-        script_pubkey: recipient_script
-    };
-
-    output.push(recipient_output);
-
-    if change > cost_of_change {
-        let change_output = TxOut {
-            value: change,
-            script_pubkey: sp_output_script(&derived, change_address)?
-        };
-        output.push(change_output);
-
+    let recipient_is_sp = matches!(recipient, Recipient::SilentPayment(_));
+    if recipient_is_sp {
         // true marks each key as taproot since every silent payment coin is a P2TR output
         let input_keys: Vec<(SecretKey, bool)> = signing_keys.iter().map(|k| (*k, true)).collect();
 
@@ -258,7 +246,31 @@ fn build_transaction(
             .collect();
 
         let partial_secret = calculate_partial_secret(&input_keys, &outpoints)?;
+        let mut sp_addrs = Vec::new();
+        if let Recipient::SilentPayment(sp) = &recipient {
+            sp_addrs.push(*sp);
+        }
+        sp_addrs.push(change_address);
+        derived = generate_recipient_pubkeys(sp_addrs, partial_secret)?;
     }
+
+    let recipient_script = match recipient {
+        Recipient::Address(ref address) => address.script_pubkey(),
+        Recipient::SilentPayment(sp) => sp_output_script(&derived, sp)?,
+    };
+
+    let recipient_output = TxOut {
+        value: target_amount,
+        script_pubkey: recipient_script
+    };
+
+    output.push(recipient_output);
+
+    let change_output = TxOut {
+        value: change_value,
+        script_pubkey: sp_output_script(&derived, change_address)?
+    };
+    output.push(change_output);
 
     let mut tx = Transaction {
         version: Version::TWO,
@@ -266,6 +278,35 @@ fn build_transaction(
         input,
         output,
     };
+
+    let prevouts: Vec<TxOut> = utxo_selection 
+        .iter()
+        .map(|c| TxOut {
+            value: c.value,
+            script_pubkey: c.script_pubkey.clone(),
+        })
+        .collect();
+    debug_assert_eq!(signing_keys.len(), prevouts.len());
+    let mut cache = SighashCache::new(&tx);
+    let mut witnesses = Vec::with_capacity(utxo_selection.len());
+    for (i, signing_key) in signing_keys.iter().enumerate() {
+        let sighash = cache.taproot_key_spend_signature_hash(
+            i,
+            &Prevouts::All(&prevouts),
+            TapSighashType::Default,
+        )?;
+        let keypair = Keypair::from_secret_key(&secp, signing_key);
+        let message = Message::from_digest(sighash.to_byte_array());
+        let signature = secp.sign_schnorr_no_aux_rand(&message, &keypair);
+        let sig = taproot::Signature {
+            signature,
+            sighash_type: TapSighashType::Default,
+        };
+        witnesses.push(Witness::from_slice(&[sig.serialize()]));
+    }
+    for (txin, witness) in tx.input.iter_mut().zip(witnesses) {
+        txin.witness = witness;
+    }
 
     Ok(tx)
 }
