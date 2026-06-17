@@ -9,8 +9,8 @@ bitcoin = { version = "0.32.8", features = ["rand-std"] }
 bitcoinkernel = "0.2"
 log = "0.4"
 #bitcoin-coin-selection = { version = "0.7", features = ["rand"] }
-rand = { version = "0.8.5" }
-bitcoin-coin-selection = { path= "../../../rust-bitcoin-coin-selection", features = ["rand"] }
+#bitcoin-coin-selection = { path= "../../../rust-bitcoin-coin-selection", features = ["rand"] }
+bitcoin-coin-selection = { git = "https://github.com/p2pderivatives/rust-bitcoin-coin-selection", rev = "41165143fec9d92c17f644ea09ae725f7b3dc26f", features = ["rand"] }
 
 [dev-dependencies]
 tempfile = "3"

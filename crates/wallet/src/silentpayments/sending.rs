@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
-use bitcoin_coin_selection::{single_random_draw, WeightedUtxo};
-use bitcoin_coin_selection::select_coins_srd;
+use bitcoin_coin_selection::{single_random_draw, branch_and_bound, WeightedUtxo};
 
 use bitcoin::hashes::Hash;
 use bitcoin::key::TweakedPublicKey;
@@ -186,8 +185,6 @@ impl WeightedUtxo for Utxo {
     }
 }
 
-use rand::thread_rng;
-
 fn build_transaction(
     spend_secret: &SecretKey,
     recipient: Recipient,
@@ -206,8 +203,6 @@ fn build_transaction(
         .map(|c| Utxo { value: c.coin.value, outpoint: c.outpoint, tweak: c.coin.tweak } )
         .collect();
 
-    // TODO
-    let cost_of_change = Amount::ZERO;
     let (_i, utxo_selection) =
         single_random_draw(target_amount, fee_rate, &utxos).unwrap();
 
@@ -533,9 +528,6 @@ mod tests {
             )]),
         };
         let change_policy = ChangePolicy::min_value(DrainWeights::TR_KEYSPEND, 330);
-
-        // max_bnb_rounds = 0 skips branch and bound, forcing the largest-first fallback.
-        let (selected, _) = select_coins(&coins, target, change_policy, 0).unwrap();
 
         let mut values: Vec<u64> = selected.iter().map(|c| c.coin.value.to_sat()).collect();
         values.sort_unstable();
