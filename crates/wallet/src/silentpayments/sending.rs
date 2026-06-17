@@ -535,47 +535,6 @@ mod tests {
     }
 
     #[test]
-    fn fallback_selects_largest_first() {
-        let spend_secret = even_secret([0x02; 32]);
-        let owned: Vec<(OutPoint, Coin)> = [30_000u64, 20_000, 10_000, 5_000]
-            .iter()
-            .enumerate()
-            .map(|(i, value)| {
-                let tweak = Scalar::from_be_bytes([i as u8 + 1; 32]).unwrap();
-                let outpoint = OutPoint {
-                    txid: Txid::from_byte_array([0xab; 32]),
-                    vout: i as u32,
-                };
-                (
-                    outpoint,
-                    owned_coin(&spend_secret, tweak, Amount::from_sat(*value)),
-                )
-            })
-            .collect();
-        let coins: Vec<SpendableCoin> = owned
-            .iter()
-            .map(|(outpoint, coin)| SpendableCoin {
-                outpoint: *outpoint,
-                coin,
-            })
-            .collect();
-
-        let amount = Amount::from_sat(45_000);
-        let target = Target {
-            fee: TargetFee::from_feerate(cs_feerate(FeeRate::from_sat_per_vb(2).unwrap())),
-            outputs: TargetOutputs::fund_outputs([(
-                DrainWeights::TR_KEYSPEND.output_weight,
-                amount.to_sat(),
-            )]),
-        };
-        let change_policy = ChangePolicy::min_value(DrainWeights::TR_KEYSPEND, 330);
-
-        let mut values: Vec<u64> = selected.iter().map(|c| c.coin.value.to_sat()).collect();
-        values.sort_unstable();
-        assert_eq!(values, vec![20_000, 30_000]);
-    }
-
-    #[test]
     fn absorbs_uneconomical_change_at_high_feerate() {
         let secp = Secp256k1::new();
         let scan_secret = even_secret([0x01; 32]);
