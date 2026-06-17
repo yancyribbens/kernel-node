@@ -68,6 +68,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
+name = "arbitrary"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
+
+[[package]]
 name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -107,6 +113,7 @@ version = "0.32.100"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39581299241111285f3268ba75ddf372746fd041620918b145c1af9d75e91b6c"
 dependencies = [
+ "arbitrary",
  "base58ck",
  "bech32 0.11.1",
  "bitcoin-io",
@@ -129,8 +136,6 @@ dependencies = [
 [[package]]
 name = "bitcoin-coin-selection"
 version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc583c30a435f49b4e0f3021e183b3d32084a0b5ed4b4410de12b0182d31195c"
 dependencies = [
  "bitcoin",
  "rand",
@@ -162,6 +167,7 @@ version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "346568ebaab2918487cea76dd55dae13c27bb618cdb737c952e69eb2017c4118"
 dependencies = [
+ "arbitrary",
  "bitcoin-internals",
 ]
 
@@ -1144,6 +1150,7 @@ dependencies = [
  "bitcoin-coin-selection",
  "bitcoinkernel",
  "log",
+ "rand",
  "silentpayments",
  "tempfile",
 ]

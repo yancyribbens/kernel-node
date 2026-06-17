@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
-use bitcoin_coin_selection::{select_coins, WeightedUtxo};
+use bitcoin_coin_selection::{single_random_draw, WeightedUtxo};
+use bitcoin_coin_selection::select_coins_srd;
 
 use bitcoin::hashes::Hash;
 use bitcoin::key::TweakedPublicKey;
@@ -185,6 +186,8 @@ impl WeightedUtxo for Utxo {
     }
 }
 
+use rand::thread_rng;
+
 fn build_transaction(
     spend_secret: &SecretKey,
     recipient: Recipient,
@@ -206,7 +209,7 @@ fn build_transaction(
     // TODO
     let cost_of_change = Amount::ZERO;
     let (_i, utxo_selection) =
-        select_coins(target_amount, cost_of_change, fee_rate, fee_rate, &utxos).unwrap();
+        single_random_draw(target_amount, fee_rate, &utxos).unwrap();
 
     let input: Vec<TxIn> = utxo_selection
         .iter()
