@@ -128,7 +128,9 @@ dependencies = [
 
 [[package]]
 name = "bitcoin-coin-selection"
-version = "0.7.2"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7b982ab1395dad3399d4fbbf61a1778e7e2a3b10afad4e6af3a2ad5057a8235"
 dependencies = [
  "bitcoin",
  "rand",
