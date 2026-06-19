@@ -103,6 +103,7 @@ impl From<bitcoin::sighash::TaprootError> for SendError {
     }
 }
 
+#[derive(Debug)]
 pub enum Recipient {
     SilentPayment(SilentPaymentAddress),
     Address(Address),
@@ -179,6 +180,7 @@ fn build_transaction(
     change_address: SilentPaymentAddress,
     coins: &[SpendableCoin],
 ) -> Result<Transaction, SendError> {
+    println!("{:?}", recipient);
     if coins.is_empty() {
         return Err(SendError::NoSpendableCoins);
     }
@@ -227,6 +229,8 @@ fn build_transaction(
 
     let change_value = drain.is_some().then(|| Amount::from_sat(drain.value));
     let recipient_is_sp = matches!(recipient, Recipient::SilentPayment(_));
+
+    println!("* derived: {:?}", derived);
     let derived: HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>> = if recipient_is_sp
         || change_value.is_some()
     {
@@ -248,6 +252,7 @@ fn build_transaction(
     } else {
         HashMap::new()
     };
+    println!("** derived: {:?}", derived);
 
     let recipient_script = match recipient {
         Recipient::Address(address) => address.script_pubkey(),
