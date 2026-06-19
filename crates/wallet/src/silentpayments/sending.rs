@@ -98,6 +98,7 @@ impl From<bitcoin::sighash::TaprootError> for SendError {
     }
 }
 
+#[derive(Debug)]
 pub enum Recipient {
     SilentPayment(SilentPaymentAddress),
     Address(Address),
@@ -190,6 +191,7 @@ fn build_transaction(
     coins: &[SpendableCoin],
 ) -> Result<Transaction, SendError> {
     println!("build transaction");
+    println!("to recipient: {:?}", recipient);
     let selection = single_random_draw(target_amount, fee_rate, &coins);
     let (_i, utxo_selection) = if selection.is_some() {
         selection.unwrap()
@@ -240,6 +242,9 @@ fn build_transaction(
         }
         sp_addrs.push(change_address);
         derived = generate_recipient_pubkeys(sp_addrs, partial_secret)?;
+        println!("derived from gen recipint pubkey {:?}", derived);
+    } else {
+        println!("recipient not SP");
     }
 
     let recipient_script = match recipient {
@@ -256,7 +261,8 @@ fn build_transaction(
 
     output.push(recipient_output);
 
-    println!("change_address, {:?}", change_address);
+    println!("derived: {:?}", derived);
+    println!("change_address: {:?}", change_address);
 
     let change_output = TxOut {
         value: change_value,
