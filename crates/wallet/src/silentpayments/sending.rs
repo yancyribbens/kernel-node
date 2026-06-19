@@ -153,6 +153,7 @@ impl Wallet {
         amount: Amount,
         fee_rate: FeeRate,
     ) -> Result<Transaction, SendError> {
+        println!("impl wallet build transaction");
         let spend_secret = self.spend_secret.ok_or(SendError::WatchOnly)?;
         let keys = self.keys.as_ref().ok_or(SendError::WatchOnly)?;
         let change_address = keys.receiver.get_change_address();
@@ -188,13 +189,16 @@ fn build_transaction(
     change_address: SilentPaymentAddress,
     coins: &[SpendableCoin],
 ) -> Result<Transaction, SendError> {
+    println!("build transaction");
     let selection = single_random_draw(target_amount, fee_rate, &coins);
     let (_i, utxo_selection) = if selection.is_some() {
         selection.unwrap()
     } else {
+        println!("no spendable coin");
         return Err(SendError::NoSpendableCoins)
     };
 
+    println!("selection complete");
     let input: Vec<TxIn> = utxo_selection
         .iter()
         .map(|c| TxIn {
@@ -208,6 +212,7 @@ fn build_transaction(
     let matches_sum: Amount = utxo_selection.iter().map(|u| u.value()).sum();
     debug_assert!(matches_sum >= target_amount);
 
+    println!("matches sum: {:?}", matches_sum);
     let secp = Secp256k1::signing_only();
     let signing_keys: Vec<SecretKey> = utxo_selection
         .iter()
@@ -247,13 +252,20 @@ fn build_transaction(
         script_pubkey: recipient_script
     };
 
+    println!("hi");
+
     output.push(recipient_output);
+
+    println!("change_address, {:?}", change_address);
 
     let change_output = TxOut {
         value: change_value,
         script_pubkey: sp_output_script(&derived, change_address)?
     };
+
+    println!("hiii");
     output.push(change_output);
+
 
     let mut tx = Transaction {
         version: Version::TWO,
@@ -298,10 +310,14 @@ fn sp_output_script(
     derived: &HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>>,
     address: SilentPaymentAddress,
 ) -> Result<ScriptBuf, SendError> {
+    println!("output script");
+    println!("address {:?}", derived.get(&address));
     let xonly = derived
         .get(&address)
         .and_then(|keys| keys.first())
         .ok_or(SendError::OutputDerivation)?;
+
+    println!("output scriptt");
     Ok(p2tr_script(*xonly))
 }
 
@@ -540,6 +556,7 @@ mod tests {
         ];
 
         for (kind, addr) in recipients {
+            println!("{:?} {:?}", kind, addr);
             let mut wallet = Wallet::new(Network::Regtest);
             wallet
                 .import_signing_keys(scan_secret, spend_secret)
