@@ -127,6 +127,18 @@ fn bitcoin_network(network: Network) -> bitcoin::Network {
     }
 }
 
+impl WeightedUtxo for SpendableCoin<'_> {
+    fn satisfaction_weight(&self) -> Weight {
+        // TODO verify this
+        bitcoin::blockdata::transaction::InputWeightPrediction::P2TR_KEY_DEFAULT_SIGHASH.weight()
+    }
+
+    fn value(&self) -> Amount {
+        self.coin.value
+    }
+}
+
+#[derive(Debug)]
 struct SpendableCoin<'a> {
     outpoint: OutPoint,
     coin: &'a Coin,
@@ -165,25 +177,6 @@ impl Wallet {
     }
 }
 
-#[derive(Debug)]
-pub struct Utxo {
-    value: Amount,
-    outpoint: OutPoint, 
-    tweak: crate::silentpayments::secp256k1::Scalar,
-    script_pubkey: ScriptBuf, 
-}
-
-impl WeightedUtxo for Utxo {
-    fn satisfaction_weight(&self) -> Weight {
-        // TODO verify this
-        bitcoin::blockdata::transaction::InputWeightPrediction::P2TR_KEY_DEFAULT_SIGHASH.weight()
-    }
-
-    fn value(&self) -> Amount {
-        self.value
-    }
-}
-
 fn build_transaction(
     spend_secret: &SecretKey,
     recipient: Recipient,
@@ -193,21 +186,7 @@ fn build_transaction(
     change_address: SilentPaymentAddress,
     coins: &[SpendableCoin],
 ) -> Result<Transaction, SendError> {
-    let utxos: Vec<Utxo> = coins 
-        .iter()
-        .map(|c| Utxo {
-            value: c.coin.value,
-            outpoint: c.outpoint,
-            tweak: c.coin.tweak,
-            script_pubkey: c.coin.script_pubkey.clone()
-        })
-        .collect();
-
-    println!("{:?}", fee_rate);
-    println!("{:?}", target_amount);
-    println!("{:?}", utxos);
-    let selection = single_random_draw(target_amount, fee_rate, &utxos);
-    println!("{:?}", selection);
+    let selection = single_random_draw(target_amount, fee_rate, &coins);
     let (_i, utxo_selection) = if selection.is_some() {
         selection.unwrap()
     } else {
@@ -230,7 +209,7 @@ fn build_transaction(
     let secp = Secp256k1::signing_only();
     let signing_keys: Vec<SecretKey> = utxo_selection
         .iter()
-        .map(|c| spend_secret.add_tweak(&c.tweak))
+        .map(|c| spend_secret.add_tweak(&c.coin.tweak))
         .collect::<Result<_, secp256k1::Error>>()?;
 
     let change_value: Amount = matches_sum - target_amount;
@@ -284,8 +263,8 @@ fn build_transaction(
     let prevouts: Vec<TxOut> = utxo_selection 
         .iter()
         .map(|c| TxOut {
-            value: c.value,
-            script_pubkey: c.script_pubkey.clone(),
+            value: c.coin.value,
+            script_pubkey: c.coin.script_pubkey.clone(),
         })
         .collect();
     debug_assert_eq!(signing_keys.len(), prevouts.len());
