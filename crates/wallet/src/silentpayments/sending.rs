@@ -180,7 +180,7 @@ fn build_transaction(
     change_address: SilentPaymentAddress,
     coins: &[SpendableCoin],
 ) -> Result<Transaction, SendError> {
-    println!("{:?}", recipient);
+    println!("target amount {:?}", amount);
     if coins.is_empty() {
         return Err(SendError::NoSpendableCoins);
     }
@@ -219,6 +219,7 @@ fn build_transaction(
     );
 
     let (mut selected, drain) = select_coins(coins, target, change_policy, 100_000)?;
+    println!("drain value {:?}", drain.value);
     let mut rng = bitcoin::secp256k1::rand::thread_rng();
     selected.shuffle(&mut rng);
 
@@ -228,9 +229,9 @@ fn build_transaction(
         .collect::<Result<_, secp256k1::Error>>()?;
 
     let change_value = drain.is_some().then(|| Amount::from_sat(drain.value));
+    println!("change_value {:?}", change_value);
     let recipient_is_sp = matches!(recipient, Recipient::SilentPayment(_));
 
-    println!("* derived: {:?}", derived);
     let derived: HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>> = if recipient_is_sp
         || change_value.is_some()
     {
@@ -252,7 +253,6 @@ fn build_transaction(
     } else {
         HashMap::new()
     };
-    println!("** derived: {:?}", derived);
 
     let recipient_script = match recipient {
         Recipient::Address(address) => address.script_pubkey(),
@@ -263,7 +263,7 @@ fn build_transaction(
         script_pubkey: recipient_script,
     }];
     if let Some(value) = change_value {
-        println!("derived: {:?} change_address: {:?}", derived, change_address);
+        println!("change_value output: {:?}", value);
         output.push(TxOut {
             value,
             script_pubkey: sp_output_script(&derived, change_address)?,
@@ -280,6 +280,8 @@ fn build_transaction(
             witness: Witness::new(),
         })
         .collect();
+
+    println!("output: {:?}", output);
 
     let mut tx = Transaction {
         version: Version::TWO,
@@ -370,7 +372,6 @@ fn sp_output_script(
     derived: &HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>>,
     address: SilentPaymentAddress,
 ) -> Result<ScriptBuf, SendError> {
-    println!("address {:?}", derived.get(&address));
     let xonly = derived
         .get(&address)
         .and_then(|keys| keys.first())
@@ -474,6 +475,7 @@ mod tests {
         assert_eq!(tx.output.len(), 2);
         assert!(tx.output.iter().any(|o| o.value == amount));
 
+        println!("val {:?} sum {:?}", coin.value, tx.output.iter().map(|o| o.value).sum::<Amount>());
         let fee = coin.value - tx.output.iter().map(|o| o.value).sum::<Amount>();
         assert!(fee > Amount::ZERO);
 
