@@ -368,7 +368,7 @@ mod tests {
         let recipient = address(even_secret([0x03; 32]), even_secret([0x04; 32]));
 
         let tweak = Scalar::from_be_bytes([0x05; 32]).unwrap();
-        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(100_000));
+        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(101_000));
         let outpoint = OutPoint {
             txid: Txid::from_byte_array([0xab; 32]),
             vout: 0,
@@ -457,7 +457,7 @@ mod tests {
             .unwrap();
 
         let tweak = Scalar::from_be_bytes([0x05; 32]).unwrap();
-        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(100_000));
+        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(101_000));
         let outpoint = OutPoint {
             txid: Txid::from_byte_array([0xab; 32]),
             vout: 0,
@@ -489,7 +489,7 @@ mod tests {
             .unwrap();
 
         let tweak = Scalar::from_be_bytes([0x05; 32]).unwrap();
-        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(100_000));
+        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(101_000));
         let outpoint = OutPoint {
             txid: Txid::from_byte_array([0xab; 32]),
             vout: 0,
@@ -545,7 +545,7 @@ mod tests {
                 .unwrap();
 
             let tweak = Scalar::from_be_bytes([0x05; 32]).unwrap();
-            let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(100_000));
+            let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(101_000));
             wallet.utxos.insert(
                 OutPoint {
                     txid: Txid::from_byte_array([0xab; 32]),
