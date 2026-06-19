@@ -258,6 +258,7 @@ fn build_transaction(
         script_pubkey: recipient_script,
     }];
     if let Some(value) = change_value {
+        println!("derived: {:?} change_address: {:?}", derived, change_address);
         output.push(TxOut {
             value,
             script_pubkey: sp_output_script(&derived, change_address)?,
@@ -364,6 +365,7 @@ fn sp_output_script(
     derived: &HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>>,
     address: SilentPaymentAddress,
 ) -> Result<ScriptBuf, SendError> {
+    println!("address {:?}", derived.get(&address));
     let xonly = derived
         .get(&address)
         .and_then(|keys| keys.first())
