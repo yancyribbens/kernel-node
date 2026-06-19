@@ -154,7 +154,6 @@ impl Wallet {
         amount: Amount,
         fee_rate: FeeRate,
     ) -> Result<Transaction, SendError> {
-        println!("impl wallet build transaction");
         let spend_secret = self.spend_secret.ok_or(SendError::WatchOnly)?;
         let keys = self.keys.as_ref().ok_or(SendError::WatchOnly)?;
         let change_address = keys.receiver.get_change_address();
@@ -190,17 +189,13 @@ fn build_transaction(
     change_address: SilentPaymentAddress,
     coins: &[SpendableCoin],
 ) -> Result<Transaction, SendError> {
-    println!("build transaction");
-    println!("to recipient: {:?}", recipient);
     let selection = single_random_draw(target_amount, fee_rate, &coins);
     let (_i, utxo_selection) = if selection.is_some() {
         selection.unwrap()
     } else {
-        println!("no spendable coin");
         return Err(SendError::NoSpendableCoins)
     };
 
-    println!("selection complete");
     let input: Vec<TxIn> = utxo_selection
         .iter()
         .map(|c| TxIn {
@@ -212,18 +207,17 @@ fn build_transaction(
         .collect();
 
     let matches_sum: Amount = utxo_selection.iter().map(|u| u.value()).sum();
+    let fee_total: Amount = utxo_selection.iter().map(|u| u.calculate_fee(fee_rate).unwrap()).sum();
     debug_assert!(matches_sum >= target_amount);
 
-    println!("matches sum: {:?}", matches_sum);
     let secp = Secp256k1::signing_only();
     let signing_keys: Vec<SecretKey> = utxo_selection
         .iter()
         .map(|c| spend_secret.add_tweak(&c.coin.tweak))
         .collect::<Result<_, secp256k1::Error>>()?;
 
-    let change_value: Amount = matches_sum - target_amount;
+    let change_value: Amount = matches_sum - target_amount - fee_total;
 
-    let mut derived: HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>> = HashMap::new();
     let mut output = vec![];
     // true marks each key as taproot since every silent payment coin is a P2TR output
     let input_keys: Vec<(SecretKey, bool)> = signing_keys.iter().map(|k| (*k, true)).collect();
@@ -239,8 +233,7 @@ fn build_transaction(
         sp_addrs.push(*sp);
     }
     sp_addrs.push(change_address);
-    derived = generate_recipient_pubkeys(sp_addrs, partial_secret)?;
-    println!("derived from gen recipint pubkey {:?}", derived);
+    let derived = generate_recipient_pubkeys(sp_addrs, partial_secret)?;
 
     let recipient_script = match recipient {
         Recipient::Address(ref address) => address.script_pubkey(),
@@ -252,21 +245,14 @@ fn build_transaction(
         script_pubkey: recipient_script
     };
 
-    println!("hi");
-
     output.push(recipient_output);
-
-    println!("derived: {:?}", derived);
-    println!("change_address: {:?}", change_address);
 
     let change_output = TxOut {
         value: change_value,
         script_pubkey: sp_output_script(&derived, change_address)?
     };
 
-    println!("hiii");
     output.push(change_output);
-
 
     let mut tx = Transaction {
         version: Version::TWO,
@@ -311,14 +297,11 @@ fn sp_output_script(
     derived: &HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>>,
     address: SilentPaymentAddress,
 ) -> Result<ScriptBuf, SendError> {
-    println!("output script");
-    println!("address {:?}", derived.get(&address));
     let xonly = derived
         .get(&address)
         .and_then(|keys| keys.first())
         .ok_or(SendError::OutputDerivation)?;
 
-    println!("output scriptt");
     Ok(p2tr_script(*xonly))
 }
 
@@ -413,10 +396,7 @@ mod tests {
         assert_eq!(tx.output.len(), 2);
         assert!(tx.output.iter().any(|o| o.value == amount));
 
-        println!("coin value {:?}", coin.value);
-        println!("sum {:?}", tx.output.iter().map(|o| o.value).sum::<Amount>());
         let fee = coin.value - tx.output.iter().map(|o| o.value).sum::<Amount>();
-        println!("{:?}", fee);
         assert!(fee > Amount::ZERO);
 
         let prevouts = [TxOut {
@@ -559,7 +539,6 @@ mod tests {
         ];
 
         for (kind, addr) in recipients {
-            println!("{:?} {:?}", kind, addr);
             let mut wallet = Wallet::new(Network::Regtest);
             wallet
                 .import_signing_keys(scan_secret, spend_secret)
