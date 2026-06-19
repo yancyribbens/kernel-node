@@ -225,27 +225,22 @@ fn build_transaction(
 
     let mut derived: HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>> = HashMap::new();
     let mut output = vec![];
-    let recipient_is_sp = matches!(recipient, Recipient::SilentPayment(_));
-    if recipient_is_sp {
-        // true marks each key as taproot since every silent payment coin is a P2TR output
-        let input_keys: Vec<(SecretKey, bool)> = signing_keys.iter().map(|k| (*k, true)).collect();
+    // true marks each key as taproot since every silent payment coin is a P2TR output
+    let input_keys: Vec<(SecretKey, bool)> = signing_keys.iter().map(|k| (*k, true)).collect();
 
-        let outpoints: Vec<(String, u32)> = utxo_selection
-            .iter()
-            .map(|c| (c.outpoint.txid.to_string(), c.outpoint.vout))
-            .collect();
+    let outpoints: Vec<(String, u32)> = utxo_selection
+        .iter()
+        .map(|c| (c.outpoint.txid.to_string(), c.outpoint.vout))
+        .collect();
 
-        let partial_secret = calculate_partial_secret(&input_keys, &outpoints)?;
-        let mut sp_addrs = Vec::new();
-        if let Recipient::SilentPayment(sp) = &recipient {
-            sp_addrs.push(*sp);
-        }
-        sp_addrs.push(change_address);
-        derived = generate_recipient_pubkeys(sp_addrs, partial_secret)?;
-        println!("derived from gen recipint pubkey {:?}", derived);
-    } else {
-        println!("recipient not SP");
+    let partial_secret = calculate_partial_secret(&input_keys, &outpoints)?;
+    let mut sp_addrs = Vec::new();
+    if let Recipient::SilentPayment(sp) = &recipient {
+        sp_addrs.push(*sp);
     }
+    sp_addrs.push(change_address);
+    derived = generate_recipient_pubkeys(sp_addrs, partial_secret)?;
+    println!("derived from gen recipint pubkey {:?}", derived);
 
     let recipient_script = match recipient {
         Recipient::Address(ref address) => address.script_pubkey(),
