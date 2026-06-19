@@ -129,8 +129,10 @@ fn bitcoin_network(network: Network) -> bitcoin::Network {
 
 impl WeightedUtxo for SpendableCoin<'_> {
     fn satisfaction_weight(&self) -> Weight {
-        // TODO verify this
-        bitcoin::blockdata::transaction::InputWeightPrediction::P2TR_KEY_DEFAULT_SIGHASH.weight()
+        // see rust-bitcoin InputWeightPrediction P2TR_KEY_DEFAULT_SIGHASH
+        // for full calculation, see InputWeightPrediction::from_slice()
+        // 1 witness_len + 1 item len +  64 signature
+        Weight::from_wu(66)
     }
 
     fn value(&self) -> Amount {
