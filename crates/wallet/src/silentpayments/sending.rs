@@ -413,9 +413,11 @@ mod tests {
         assert_eq!(tx.output.len(), 2);
         assert!(tx.output.iter().any(|o| o.value == amount));
 
+        println!("coin value {:?}", coin.value);
+        println!("sum {:?}", tx.output.iter().map(|o| o.value).sum::<Amount>());
         let fee = coin.value - tx.output.iter().map(|o| o.value).sum::<Amount>();
-        // TODO
-        // assert!(fee > Amount::ZERO);
+        println!("{:?}", fee);
+        assert!(fee > Amount::ZERO);
 
         let prevouts = [TxOut {
             value: coin.value,
