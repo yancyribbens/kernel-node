@@ -218,6 +218,8 @@ fn build_transaction(
         .collect::<Result<_, secp256k1::Error>>()?;
 
     let change_value: Amount = utxo_sum - target_amount - fee_total;
+    // see CHANGE_LOWER of 50k sats in bitcoin-core,
+    debug_assert!(change_value.to_sat() >= 50_000);
 
     let mut output = vec![];
     // true marks each key as taproot since every silent payment coin is a P2TR output
