@@ -19,6 +19,32 @@ use silentpayments::{Network, SilentPaymentAddress};
 
 use crate::silentpayments::wallet::{Coin, Wallet};
 
+// https://github.com/rust-bitcoin/rust-bitcoin/blob/35202ba51bef3236e6ed1007a0d2111265b6498c/bitcoin/src/blockdata/transaction.rs#L357
+const SEQUENCE_SIZE: u64 = 4;
+
+// https://github.com/rust-bitcoin/rust-bitcoin/blob/35202ba51bef3236e6ed1007a0d2111265b6498c/bitcoin/src/blockdata/transaction.rs#L92
+const OUT_POINT_SIZE: u64 = 32 + 4;
+
+// https://github.com/rust-bitcoin/rust-bitcoin/blob/35202ba51bef3236e6ed1007a0d2111265b6498c/bitcoin/src/blockdata/transaction.rs#L249
+const BASE_WEIGHT: Weight = Weight::from_vb_unwrap(OUT_POINT_SIZE + SEQUENCE_SIZE);
+
+// cost of change is computed as:
+// cost to create a change outpu + cost to spend the output
+// cost to spend the output is also known as the discard fee
+//
+// therefore, cost_of_change =
+//      (change output size * effective fee rate) +
+//      (size of change output * discard feerate)
+//
+// params
+//  * fee_rate - current effective fee rate
+//  * discard_fee_rate - 1008-block target feerate cropped to [3, 10] ṩ/vB inclusive.
+fn default_tr_cost_of_change(fee_rate: FeeRate, discard_fee_rate: FeeRate) -> Amount {
+    // 226 WU = 57.5 vB
+    let output_size = BASE_WEIGHT + Weight::from_wu(66);
+    (output_size * fee_rate) + (output_size * discard_fee_rate)
+}
+
 #[derive(Debug)]
 pub enum SendError {
     WatchOnly,
@@ -151,6 +177,7 @@ impl Wallet {
         recipient: Recipient,
         amount: Amount,
         fee_rate: FeeRate,
+        long_term_fee_rate: FeeRate,
     ) -> Result<Transaction, SendError> {
         let spend_secret = self.spend_secret.ok_or(SendError::WatchOnly)?;
         let keys = self.keys.as_ref().ok_or(SendError::WatchOnly)?;
@@ -171,6 +198,7 @@ impl Wallet {
             recipient,
             amount,
             fee_rate,
+            long_term_fee_rate,
             self.scan_height,
             change_address,
             &coins,
@@ -183,10 +211,12 @@ fn build_transaction(
     recipient: Recipient,
     target_amount: Amount,
     fee_rate: FeeRate,
+    long_term_fee_rate: FeeRate,
     tip_height: u32,
     change_address: SilentPaymentAddress,
     coins: &[SpendableCoin],
 ) -> Result<Transaction, SendError> {
+    let _cost_of_change = default_tr_cost_of_change(fee_rate, long_term_fee_rate);
     let selection = single_random_draw(target_amount, fee_rate, coins);
 
     let utxo_selection = if let Some((_i, utxos)) = selection {
@@ -356,6 +386,14 @@ mod tests {
     }
 
     #[test]
+    fn cost_of_change_test() {
+        let fee_rate = FeeRate::from_sat_per_vb(3).unwrap();
+        let long_term_fee_rate = FeeRate::from_sat_per_vb(10).unwrap();
+        let cost_of_change = default_tr_cost_of_change(fee_rate, long_term_fee_rate);
+        assert_eq!(cost_of_change.to_sat(), 735);
+    }
+
+    #[test]
     fn signs_a_spendable_taproot_input() {
         let secp = Secp256k1::new();
         let scan_secret = even_secret([0x01; 32]);
@@ -382,12 +420,14 @@ mod tests {
         }];
 
         let fee_rate = FeeRate::from_sat_per_vb(2).unwrap();
+        let long_term_fee_rate = FeeRate::from_sat_per_vb(10).unwrap();
         let amount = Amount::from_sat(50_000);
         let tx = build_transaction(
             &spend_secret,
             Recipient::SilentPayment(recipient),
             amount,
             fee_rate,
+            long_term_fee_rate,
             100,
             change_address,
             &coins,
@@ -442,6 +482,7 @@ mod tests {
             Recipient::SilentPayment(recipient),
             Amount::from_sat(20_000),
             FeeRate::from_sat_per_vb(2).unwrap(),
+            FeeRate::from_sat_per_vb(10).unwrap(),
             100,
             change_address,
             &coins,
@@ -469,15 +510,26 @@ mod tests {
 
         let recipient = address(even_secret([0x03; 32]), even_secret([0x04; 32]));
         let fee_rate = FeeRate::from_sat_per_vb(2).unwrap();
+        let long_term_fee_rate = FeeRate::from_sat_per_vb(10).unwrap();
         let amount = Amount::from_sat(50_000);
 
         let tx = wallet
-            .build_transaction(Recipient::SilentPayment(recipient), amount, fee_rate)
+            .build_transaction(
+                Recipient::SilentPayment(recipient),
+                amount,
+                fee_rate,
+                long_term_fee_rate,
+            )
             .unwrap();
         wallet.reserve_coins(tx.input.iter().map(|i| i.previous_output));
 
         let err = wallet
-            .build_transaction(Recipient::SilentPayment(recipient), amount, fee_rate)
+            .build_transaction(
+                Recipient::SilentPayment(recipient),
+                amount,
+                fee_rate,
+                long_term_fee_rate,
+            )
             .unwrap_err();
         assert!(matches!(err, SendError::NoSpendableCoins));
     }
@@ -501,22 +553,38 @@ mod tests {
 
         let recipient = address(even_secret([0x03; 32]), even_secret([0x04; 32]));
         let fee_rate = FeeRate::from_sat_per_vb(2).unwrap();
+        let long_term_fee_rate = FeeRate::from_sat_per_vb(10).unwrap();
         let amount = Amount::from_sat(50_000);
 
         let tx = wallet
-            .build_transaction(Recipient::SilentPayment(recipient), amount, fee_rate)
+            .build_transaction(
+                Recipient::SilentPayment(recipient),
+                amount,
+                fee_rate,
+                long_term_fee_rate,
+            )
             .unwrap();
         let outpoints: Vec<_> = tx.input.iter().map(|i| i.previous_output).collect();
 
         wallet.reserve_coins(outpoints.iter().copied());
         assert!(matches!(
-            wallet.build_transaction(Recipient::SilentPayment(recipient), amount, fee_rate),
+            wallet.build_transaction(
+                Recipient::SilentPayment(recipient),
+                amount,
+                fee_rate,
+                long_term_fee_rate
+            ),
             Err(SendError::NoSpendableCoins)
         ));
 
         wallet.release_coins(outpoints);
         assert!(wallet
-            .build_transaction(Recipient::SilentPayment(recipient), amount, fee_rate)
+            .build_transaction(
+                Recipient::SilentPayment(recipient),
+                amount,
+                fee_rate,
+                long_term_fee_rate
+            )
             .is_ok());
     }
 
@@ -564,6 +632,7 @@ mod tests {
                     Recipient::Address(addr),
                     amount,
                     FeeRate::from_sat_per_vb(2).unwrap(),
+                    FeeRate::from_sat_per_vb(10).unwrap(),
                 )
                 .unwrap_or_else(|e| panic!("{kind}: {e}"));
 
@@ -591,6 +660,7 @@ mod tests {
             Recipient::SilentPayment(recipient),
             Amount::from_sat(1_000),
             FeeRate::from_sat_per_vb(2).unwrap(),
+            FeeRate::from_sat_per_vb(10).unwrap(),
             100,
             change_address,
             &[],
