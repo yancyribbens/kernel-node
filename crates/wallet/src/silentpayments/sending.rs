@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
-use bitcoin_coin_selection::{single_random_draw, WeightedUtxo};
+use bitcoin_coin_selection::{select_coins, WeightedUtxo};
 
 use bitcoin::hashes::Hash;
 use bitcoin::key::TweakedPublicKey;
@@ -216,8 +216,14 @@ fn build_transaction(
     change_address: SilentPaymentAddress,
     coins: &[SpendableCoin],
 ) -> Result<Transaction, SendError> {
-    let _cost_of_change = default_tr_cost_of_change(fee_rate, long_term_fee_rate);
-    let selection = single_random_draw(target_amount, fee_rate, coins);
+    let cost_of_change = default_tr_cost_of_change(fee_rate, long_term_fee_rate);
+    let selection = select_coins(
+        target_amount,
+        cost_of_change,
+        fee_rate,
+        long_term_fee_rate,
+        coins,
+    );
 
     let utxo_selection = if let Some((_i, utxos)) = selection {
         utxos
