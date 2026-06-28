@@ -111,6 +111,13 @@ enum WalletCmd {
         /// the transaction cheaper.  Likewise, if the current fee rate is low,
         /// use more inputs and consolidate the UTXO set to be fewer.
         consolidate_fee_rate_sat_per_vb: Option<f64>,
+        /// The fee rate (in %s/kvB) that indicates your tolerance for
+        /// discarding change by adding it to the fee (default: %s).
+        ///
+        /// Note: An output is discarded if it is dust at this rate, but we will
+        /// always discard up to the dust relay fee and a discard fee above that
+        /// is limited by the fee estimate for the longest target.
+        discard_fee_rate_sat_per_vb: Option<f64>,
     },
 }
 
@@ -286,6 +293,7 @@ fn main() {
                         amount_sat,
                         fee_rate_sat_per_vb,
                         consolidate_fee_rate_sat_per_vb,
+                        discard_fee_rate_sat_per_vb,
                     } => {
                         let mut req = client.send_to_address_request();
                         req.get().set_address(&address);
@@ -295,6 +303,10 @@ fn main() {
                         if let Some(consolidate_fee_rate) = consolidate_fee_rate_sat_per_vb {
                             req.get()
                                 .set_consolidate_fee_rate_sat_per_vb(consolidate_fee_rate);
+                        }
+
+                        if let Some(discard_fee_rate) = discard_fee_rate_sat_per_vb {
+                            req.get().set_discard_fee_rate_sat_per_vb(discard_fee_rate);
                         }
 
                         let result = req.send().promise.await.unwrap();
