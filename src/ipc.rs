@@ -180,6 +180,7 @@ impl wallet_capnp::wallet::Server for WalletIpcInterface {
         let p = params.get()?;
         let address = p.get_address()?.to_string()?;
         let amount = Amount::from_sat(p.get_amount_sat());
+
         let fee_rate_sat_per_vb = p.get_fee_rate_sat_per_vb();
         if !fee_rate_sat_per_vb.is_finite() || fee_rate_sat_per_vb < 0.0 {
             return Err(capnp::Error::failed(
@@ -188,9 +189,20 @@ impl wallet_capnp::wallet::Server for WalletIpcInterface {
         }
         // 250 sat/kwu equals 1 sat/vB, rounded up so the rate is never below what was asked
         let fee_rate = FeeRate::from_sat_per_kwu((fee_rate_sat_per_vb * 250.0).ceil() as u64);
+
+        let long_term_fee_rate_sat_per_vb = p.get_long_term_fee_rate_sat_per_vb();
+        if !long_term_fee_rate_sat_per_vb.is_finite() || long_term_fee_rate_sat_per_vb < 0.0 {
+            return Err(capnp::Error::failed(
+                "long term fee rate must be a non-negative number".to_string(),
+            ));
+        }
+        let long_term_fee_rate =
+            FeeRate::from_sat_per_kwu((long_term_fee_rate_sat_per_vb * 250.0).ceil() as u64);
+
         let mut wallet = self.state.lock().unwrap();
-        let build = Recipient::parse(&address, wallet.network)
-            .and_then(|recipient| wallet.build_transaction(recipient, amount, fee_rate));
+        let build = Recipient::parse(&address, wallet.network).and_then(|recipient| {
+            wallet.build_transaction(recipient, amount, fee_rate, long_term_fee_rate)
+        });
         let tx = match build {
             Ok(tx) => tx,
             Err(e) if e.is_user_error() => {

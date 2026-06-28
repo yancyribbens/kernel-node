@@ -91,6 +91,9 @@ enum WalletCmd {
         amount_sat: u64,
         /// Fee rate, in satoshis per virtual byte.
         fee_rate_sat_per_vb: f64,
+        /// Long term fee rate, in satoshis per virtual byte.  Defaults to fee_rate if not
+        /// supplied.
+        long_term_fee_rate_sat_per_vb: Option<f64>,
     },
 }
 
@@ -251,11 +254,20 @@ fn main() {
                         address,
                         amount_sat,
                         fee_rate_sat_per_vb,
+                        long_term_fee_rate_sat_per_vb,
                     } => {
                         let mut req = client.send_to_address_request();
                         req.get().set_address(&address);
                         req.get().set_amount_sat(amount_sat);
                         req.get().set_fee_rate_sat_per_vb(fee_rate_sat_per_vb);
+
+                        if let Some(lt_fee_rate) = long_term_fee_rate_sat_per_vb {
+                            req.get().set_long_term_fee_rate_sat_per_vb(lt_fee_rate);
+                        } else {
+                            req.get()
+                                .set_long_term_fee_rate_sat_per_vb(fee_rate_sat_per_vb);
+                        }
+
                         let result = req.send().promise.await.unwrap();
                         let r = result.get().unwrap();
                         let message = r.get_message().unwrap().to_string().unwrap();
