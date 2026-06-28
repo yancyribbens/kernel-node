@@ -181,8 +181,7 @@ impl wallet_capnp::wallet::Server for WalletIpcInterface {
         let address = p.get_address()?.to_string()?;
         let amount = Amount::from_sat(p.get_amount_sat());
         let fee_rate_sat_per_vb = p.get_fee_rate_sat_per_vb();
-        // 250 sat/kwu equals 1 sat/vB, rounded up so the rate is never below what was asked
-        let fee_rate = FeeRate::from_sat_per_kwu(fee_rate_sat_per_vb * 250);
+        let fee_rate = FeeRate::from_sat_per_vb_u32(fee_rate_sat_per_vb);
         let mut wallet = self.state.lock().unwrap();
         let build = Recipient::parse(&address, wallet.network)
             .and_then(|recipient| wallet.build_transaction(recipient, amount, fee_rate));
