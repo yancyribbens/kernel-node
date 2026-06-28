@@ -84,12 +84,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bdk_coin_select"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43064fa3dd1d3a8b24079cfcb5ede6b785857edc782277f17a1736511ccc1916"
-
-[[package]]
 name = "bech32"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -131,6 +125,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "060c05780195789a7b89bbfe7f57a1a8cd6ae0bb3daa9b96eeca4fbe0ba8014f"
 dependencies = [
  "bitcoin",
+]
+
+[[package]]
+name = "bitcoin-coin-selection"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc583c30a435f49b4e0f3021e183b3d32084a0b5ed4b4410de12b0182d31195c"
+dependencies = [
+ "bitcoin",
+ "rand",
 ]
 
 [[package]]
@@ -1137,8 +1141,8 @@ checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 name = "wallet"
 version = "0.1.0"
 dependencies = [
- "bdk_coin_select",
  "bitcoin",
+ "bitcoin-coin-selection",
  "bitcoinkernel",
  "log",
  "silentpayments",
