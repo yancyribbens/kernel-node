@@ -93,6 +93,13 @@ enum WalletCmd {
         /// pool can be reduced (default: 10 sats/vB).  Long term fee rate,
         /// in satoshis per virtual byte.  Defaults to fee_rate if not supplied.
         consolidate_fee_rate_sat_per_vb: Option<f64>,
+        /// The fee rate (in %s/kvB) that indicates your tolerance for
+        /// discarding change by adding it to the fee (default: %s).
+        ///
+        /// Note: An output is discarded if it is dust at this rate, but we will
+        /// always discard up to the dust relay fee and a discard fee above that
+        /// is limited by the fee estimate for the longest target.
+        discard_fee_rate_sat_per_vb: Option<f64>,
     },
 }
 
@@ -239,6 +246,7 @@ fn main() {
                         amount_sat,
                         fee_rate_sat_per_vb,
                         consolidate_fee_rate_sat_per_vb,
+                        discard_fee_rate_sat_per_vb,
                     } => {
                         let mut req = client.send_to_address_request();
                         req.get().set_address(&address);
@@ -250,6 +258,12 @@ fn main() {
                                 .set_consolidate_fee_rate_sat_per_vb(consolidate_fee_rate);
                         } else {
                             req.get().set_consolidate_fee_rate_sat_per_vb(10.0);
+                        }
+
+                        if let Some(discard_fee_rate) = discard_fee_rate_sat_per_vb {
+                            req.get().set_discard_fee_rate_sat_per_vb(discard_fee_rate);
+                        } else {
+                            req.get().set_discard_fee_rate_sat_per_vb(10.0);
                         }
 
                         let result = req.send().promise.await.unwrap();
