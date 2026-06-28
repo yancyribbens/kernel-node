@@ -7,6 +7,8 @@ use wallet::silentpayments::{Recipient, Wallet};
 
 use crate::{server_capnp, wallet_capnp};
 
+const DEFAULT_CONSOLIDATE_FEE_RATE_SAT_PER_VB: f64 = 10.0;
+
 #[derive(Debug)]
 pub struct IpcInterface {
     tx: mpsc::Sender<()>,
@@ -188,9 +190,27 @@ impl wallet_capnp::wallet::Server for WalletIpcInterface {
         }
         // 250 sat/kwu equals 1 sat/vB, rounded up so the rate is never below what was asked
         let fee_rate = FeeRate::from_sat_per_kwu((fee_rate_sat_per_vb * 250.0).ceil() as u64);
+
+        let raw = p.get_consolidate_fee_rate_sat_per_vb();
+        if !raw.is_finite() || raw < 0.0 {
+            return Err(capnp::Error::failed(
+                "consolidate fee rate must be a non-negative number".to_string(),
+            ));
+        }
+        let long_term_fee_rate_sat_per_vb = if raw == 0.0 {
+            DEFAULT_CONSOLIDATE_FEE_RATE_SAT_PER_VB
+        } else {
+            raw
+        };
+
+        // 250 sat/kwu equals 1 sat/vB, rounded up so the rate is never below what was asked
+        let long_term_fee_rate =
+            FeeRate::from_sat_per_kwu((long_term_fee_rate_sat_per_vb * 250.0).ceil() as u64);
+
         let mut wallet = self.state.lock().unwrap();
-        let build = Recipient::parse(&address, wallet.network)
-            .and_then(|recipient| wallet.build_transaction(recipient, amount, fee_rate));
+        let build = Recipient::parse(&address, wallet.network).and_then(|recipient| {
+            wallet.build_transaction(recipient, amount, fee_rate, long_term_fee_rate)
+        });
         let tx = match build {
             Ok(tx) => tx,
             Err(e) if e.is_user_error() => {
