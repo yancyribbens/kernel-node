@@ -181,13 +181,8 @@ impl wallet_capnp::wallet::Server for WalletIpcInterface {
         let address = p.get_address()?.to_string()?;
         let amount = Amount::from_sat(p.get_amount_sat());
         let fee_rate_sat_per_vb = p.get_fee_rate_sat_per_vb();
-        if !fee_rate_sat_per_vb.is_finite() || fee_rate_sat_per_vb < 0.0 {
-            return Err(capnp::Error::failed(
-                "fee rate must be a non-negative number".to_string(),
-            ));
-        }
         // 250 sat/kwu equals 1 sat/vB, rounded up so the rate is never below what was asked
-        let fee_rate = FeeRate::from_sat_per_kwu((fee_rate_sat_per_vb * 250.0).ceil() as u64);
+        let fee_rate = FeeRate::from_sat_per_kwu(fee_rate_sat_per_vb * 250);
         let mut wallet = self.state.lock().unwrap();
         let build = Recipient::parse(&address, wallet.network)
             .and_then(|recipient| wallet.build_transaction(recipient, amount, fee_rate));

@@ -87,7 +87,7 @@ enum WalletCmd {
         /// Amount to send, in satoshis.
         amount_sat: u64,
         /// Fee rate, in satoshis per virtual byte.
-        fee_rate_sat_per_vb: f64,
+        fee_rate_sat_per_vb: u32,
     },
 }
 
