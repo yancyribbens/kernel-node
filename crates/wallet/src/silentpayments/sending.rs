@@ -22,8 +22,6 @@ use silentpayments::{Network, SilentPaymentAddress};
 
 use crate::silentpayments::wallet::{Coin, Wallet};
 
-const LONG_TERM_FEERATE_SAT_PER_VB: f32 = 1.0;
-
 #[derive(Debug)]
 pub enum SendError {
     WatchOnly,
@@ -143,6 +141,7 @@ impl Wallet {
         recipient: Recipient,
         amount: Amount,
         fee_rate: FeeRate,
+        long_term_fee_rate: FeeRate,
     ) -> Result<Transaction, SendError> {
         let spend_secret = self.spend_secret.ok_or(SendError::WatchOnly)?;
         let keys = self.keys.as_ref().ok_or(SendError::WatchOnly)?;
@@ -163,6 +162,7 @@ impl Wallet {
             recipient,
             amount,
             fee_rate,
+            long_term_fee_rate,
             self.scan_height,
             change_address,
             &coins,
@@ -170,11 +170,13 @@ impl Wallet {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_transaction(
     spend_secret: &SecretKey,
     recipient: Recipient,
     amount: Amount,
     fee_rate: FeeRate,
+    long_term_fee_rate: FeeRate,
     tip_height: u32,
     change_address: SilentPaymentAddress,
     coins: &[SpendableCoin],
@@ -213,10 +215,11 @@ fn build_transaction(
         DrainWeights::TR_KEYSPEND,
         change_dust.to_sat(),
         feerate,
-        bdk_coin_select::FeeRate::from_sat_per_vb(LONG_TERM_FEERATE_SAT_PER_VB),
+        bdk_coin_select::FeeRate::from_sat_per_vb(long_term_fee_rate.to_sat_per_vb_ceil() as f32),
     );
 
-    let (mut selected, drain) = select_coins(coins, target, change_policy, 100_000)?;
+    let (mut selected, drain) =
+        select_coins(coins, target, change_policy, long_term_fee_rate, 100_000)?;
     let mut rng = bitcoin::secp256k1::rand::thread_rng();
     selected.shuffle(&mut rng);
 
@@ -319,6 +322,7 @@ fn select_coins<'a, 'c>(
     coins: &'c [SpendableCoin<'a>],
     target: Target,
     change_policy: ChangePolicy,
+    long_term_fee_rate: FeeRate,
     max_bnb_rounds: usize,
 ) -> Result<(Vec<&'c SpendableCoin<'a>>, Drain), SendError> {
     let spendable: Vec<&SpendableCoin> = coins.iter().collect();
@@ -330,7 +334,9 @@ fn select_coins<'a, 'c>(
     let mut selector = CoinSelector::new(&candidates);
     let metric = LowestFee {
         target,
-        long_term_feerate: bdk_coin_select::FeeRate::from_sat_per_vb(LONG_TERM_FEERATE_SAT_PER_VB),
+        long_term_feerate: bdk_coin_select::FeeRate::from_sat_per_vb(
+            long_term_fee_rate.to_sat_per_vb_ceil() as f32,
+        ),
         change_policy,
     };
     if selector.run_bnb(metric, max_bnb_rounds).is_err() {
@@ -450,12 +456,14 @@ mod tests {
         }];
 
         let fee_rate = FeeRate::from_sat_per_vb(2).unwrap();
+        let long_term_fee_rate = FeeRate::from_sat_per_vb(10).unwrap();
         let amount = Amount::from_sat(50_000);
         let tx = build_transaction(
             &spend_secret,
             Recipient::SilentPayment(recipient),
             amount,
             fee_rate,
+            long_term_fee_rate,
             100,
             change_address,
             &coins,
@@ -510,6 +518,7 @@ mod tests {
             Recipient::SilentPayment(recipient),
             Amount::from_sat(20_000),
             FeeRate::from_sat_per_vb(2).unwrap(),
+            FeeRate::from_sat_per_vb(10).unwrap(),
             100,
             change_address,
             &coins,
@@ -540,12 +549,22 @@ mod tests {
         let amount = Amount::from_sat(50_000);
 
         let tx = wallet
-            .build_transaction(Recipient::SilentPayment(recipient), amount, fee_rate)
+            .build_transaction(
+                Recipient::SilentPayment(recipient),
+                amount,
+                fee_rate,
+                fee_rate,
+            )
             .unwrap();
         wallet.reserve_coins(tx.input.iter().map(|i| i.previous_output));
 
         let err = wallet
-            .build_transaction(Recipient::SilentPayment(recipient), amount, fee_rate)
+            .build_transaction(
+                Recipient::SilentPayment(recipient),
+                amount,
+                fee_rate,
+                fee_rate,
+            )
             .unwrap_err();
         assert!(matches!(err, SendError::NoSpendableCoins));
     }
@@ -572,19 +591,34 @@ mod tests {
         let amount = Amount::from_sat(50_000);
 
         let tx = wallet
-            .build_transaction(Recipient::SilentPayment(recipient), amount, fee_rate)
+            .build_transaction(
+                Recipient::SilentPayment(recipient),
+                amount,
+                fee_rate,
+                fee_rate,
+            )
             .unwrap();
         let outpoints: Vec<_> = tx.input.iter().map(|i| i.previous_output).collect();
 
         wallet.reserve_coins(outpoints.iter().copied());
         assert!(matches!(
-            wallet.build_transaction(Recipient::SilentPayment(recipient), amount, fee_rate),
+            wallet.build_transaction(
+                Recipient::SilentPayment(recipient),
+                amount,
+                fee_rate,
+                fee_rate
+            ),
             Err(SendError::NoSpendableCoins)
         ));
 
         wallet.release_coins(outpoints);
         assert!(wallet
-            .build_transaction(Recipient::SilentPayment(recipient), amount, fee_rate)
+            .build_transaction(
+                Recipient::SilentPayment(recipient),
+                amount,
+                fee_rate,
+                fee_rate
+            )
             .is_ok());
     }
 
@@ -615,8 +649,9 @@ mod tests {
             .collect();
 
         let amount = Amount::from_sat(45_000);
+        let fee_rate = FeeRate::from_sat_per_vb(2).unwrap();
         let target = Target {
-            fee: TargetFee::from_feerate(cs_feerate(FeeRate::from_sat_per_vb(2).unwrap())),
+            fee: TargetFee::from_feerate(cs_feerate(fee_rate)),
             outputs: TargetOutputs::fund_outputs([(
                 DrainWeights::TR_KEYSPEND.output_weight,
                 amount.to_sat(),
@@ -625,7 +660,7 @@ mod tests {
         let change_policy = ChangePolicy::min_value(DrainWeights::TR_KEYSPEND, 330);
 
         // max_bnb_rounds = 0 skips branch and bound, forcing the largest-first fallback.
-        let (selected, _) = select_coins(&coins, target, change_policy, 0).unwrap();
+        let (selected, _) = select_coins(&coins, target, change_policy, fee_rate, 0).unwrap();
 
         let mut values: Vec<u64> = selected.iter().map(|c| c.coin.value.to_sat()).collect();
         values.sort_unstable();
@@ -670,6 +705,7 @@ mod tests {
             &spend_secret,
             Recipient::SilentPayment(recipient),
             Amount::from_sat(50_000),
+            FeeRate::from_sat_per_vb(30).unwrap(),
             FeeRate::from_sat_per_vb(30).unwrap(),
             0,
             change_address,
@@ -726,6 +762,7 @@ mod tests {
                     Recipient::Address(addr),
                     amount,
                     FeeRate::from_sat_per_vb(2).unwrap(),
+                    FeeRate::from_sat_per_vb(10).unwrap(),
                 )
                 .unwrap_or_else(|e| panic!("{kind}: {e}"));
 
@@ -753,6 +790,7 @@ mod tests {
             Recipient::SilentPayment(recipient),
             Amount::from_sat(1_000),
             FeeRate::from_sat_per_vb(2).unwrap(),
+            FeeRate::from_sat_per_vb(10).unwrap(),
             100,
             change_address,
             &[],
