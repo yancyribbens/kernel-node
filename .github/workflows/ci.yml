@@ -28,7 +28,7 @@ jobs:
           cargo install cargo-msrv@0.19.2
           cargo msrv verify
       - name: Test
-        run: cargo test --workspace --all-features --lib
+        run: cargo test --workspace --all-features
 
   macos:
     runs-on: macos-latest
@@ -40,4 +40,4 @@ jobs:
       - name: Check
         run: cargo check --all-features
       - name: Test
-        run: cargo test --workspace --all-features --lib
+        run: cargo test --workspace --all-features
