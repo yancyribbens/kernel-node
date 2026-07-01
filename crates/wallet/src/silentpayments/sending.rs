@@ -198,6 +198,10 @@ impl Wallet {
     }
 }
 
+fn create_change_output(change_value: Amount, cost_of_change: Amount) -> bool {
+    change_value > cost_of_change
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_transaction(
     spend_secret: &SecretKey,
@@ -251,7 +255,7 @@ fn build_transaction(
 
     let recipient_is_sp = matches!(recipient, Recipient::SilentPayment(_));
     let derived: HashMap<SilentPaymentAddress, Vec<XOnlyPublicKey>> = if recipient_is_sp
-        || change_value > Amount::from_sat(50_000)
+        || create_change_output(change_value, cost_of_change)
     {
         // true marks each key as taproot since every silent payment coin is a P2TR output
         let input_keys: Vec<(SecretKey, bool)> = signing_keys.iter().map(|k| (*k, true)).collect();
@@ -264,7 +268,7 @@ fn build_transaction(
         if let Recipient::SilentPayment(sp) = &recipient {
             sp_addrs.push(*sp);
         }
-        if change_value >= Amount::from_sat(50_000) {
+        if create_change_output(change_value, cost_of_change) { 
             sp_addrs.push(change_address);
         }
         generate_recipient_pubkeys(sp_addrs, partial_secret)?
@@ -280,7 +284,7 @@ fn build_transaction(
         value: target,
         script_pubkey: recipient_script,
     }];
-    if change_value > Amount::from_sat(50_000) {
+    if create_change_output(change_value, cost_of_change) {
         output.push(TxOut {
             value: change_value,
             script_pubkey: sp_output_script(&derived, change_address)?,
@@ -416,7 +420,7 @@ mod tests {
         let recipient = address(even_secret([0x03; 32]), even_secret([0x04; 32]));
 
         let tweak = Scalar::from_be_bytes([0x05; 32]).unwrap();
-        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(101_000));
+        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(100_000));
         let outpoint = OutPoint {
             txid: Txid::from_byte_array([0xab; 32]),
             vout: 0,
@@ -508,7 +512,7 @@ mod tests {
             .unwrap();
 
         let tweak = Scalar::from_be_bytes([0x05; 32]).unwrap();
-        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(101_000));
+        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(100_000));
         let outpoint = OutPoint {
             txid: Txid::from_byte_array([0xab; 32]),
             vout: 0,
@@ -550,7 +554,7 @@ mod tests {
             .unwrap();
 
         let tweak = Scalar::from_be_bytes([0x05; 32]).unwrap();
-        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(101_000));
+        let coin = owned_coin(&spend_secret, tweak, Amount::from_sat(100_000));
         let outpoint = OutPoint {
             txid: Txid::from_byte_array([0xab; 32]),
             vout: 0,
