@@ -190,7 +190,7 @@ impl wallet_capnp::wallet::Server for WalletIpcInterface {
         // 250 sat/kwu equals 1 sat/vB, rounded up so the rate is never below what was asked
         let fee_rate = FeeRate::from_sat_per_kwu((fee_rate_sat_per_vb * 250.0).ceil() as u64);
 
-        let long_term_fee_rate_sat_per_vb = p.get_long_term_fee_rate_sat_per_vb();
+        let long_term_fee_rate_sat_per_vb = p.get_consolidate_fee_rate_sat_per_vb();
         if !long_term_fee_rate_sat_per_vb.is_finite() || long_term_fee_rate_sat_per_vb < 0.0 {
             return Err(capnp::Error::failed(
                 "long term fee rate must be a non-negative number".to_string(),
