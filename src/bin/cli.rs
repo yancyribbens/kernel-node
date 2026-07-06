@@ -8,7 +8,7 @@ use kernel_node::server_capnp::server;
 use tokio::net::UnixStream;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use wallet::io::FileExt;
-use wallet::silentpayments::{SilentPaymentKeysFile, SpendKey};
+use wallet::silentpayments::{Taproot, SilentPaymentKeysFile, SpendKey};
 
 const DEFAULT_DATA_DIR: &str = "~/.kernel-node/";
 
@@ -58,6 +58,9 @@ enum WalletCmd {
         /// Write the keys to this binary file. Must not already exist.
         #[arg(long)]
         out: Option<PathBuf>,
+    },
+    /// Lorem Ipsum
+    GenerateTaprootAddr {
     },
     /// Import BIP-352 silent payment keys to enable scanning for incoming payments.
     ///
@@ -137,6 +140,12 @@ async fn connect_server(datadir_path: &str) -> server::Client {
 fn main() {
     let cli = Args::parse();
 
+    if let Commands::Wallet(WalletCmd::GenerateTaprootAddr {}) = &cli.commands {
+        Taproot::new();
+        println!("hi");
+        return
+    }
+
     if let Commands::Wallet(WalletCmd::GenerateKeys { out }) = &cli.commands {
         let (scan_priv, spend_priv, spend_pub) = generate_keys();
         match out {
@@ -202,6 +211,9 @@ fn main() {
                 match cmd {
                     WalletCmd::GenerateKeys { .. } => unreachable!("handled before runtime"),
                     WalletCmd::PrintKeysFromKeysFile { .. } => {
+                        unreachable!("handled before runtime")
+                    },
+                    WalletCmd::GenerateTaprootAddr {} => {
                         unreachable!("handled before runtime")
                     }
                     WalletCmd::ImportKeys {

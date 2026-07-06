@@ -5,6 +5,7 @@ use std::{
 };
 
 use bitcoin::secp256k1::{self, Secp256k1, SecretKey, XOnlyPublicKey};
+use bitcoin::{Address, PublicKey, Network};
 
 use crate::io::FileExt;
 
@@ -78,6 +79,26 @@ impl From<io::Error> for KeysFileError {
 impl From<secp256k1::Error> for KeysFileError {
     fn from(e: secp256k1::Error) -> Self {
         KeysFileError::InvalidKey(e)
+    }
+}
+
+use bitcoin::secp256k1::rand;
+pub struct Taproot;
+
+impl Taproot {
+    pub fn new() -> Self {
+        let s = Secp256k1::new();
+
+        let (priv_key, pub_key) = s.generate_keypair(&mut rand::thread_rng());
+        let (internal_key, _parity) = pub_key.x_only_public_key();
+        let address = Address::p2tr(&s, internal_key, None, Network::Signet);
+        println!("{:?}", address);
+        println!("{:?}", priv_key.secret_bytes());
+
+        let mut file = fs::File::create_new("/tmp/taproot").unwrap();
+        file.write_all(&priv_key.secret_bytes()).unwrap();
+
+        Self
     }
 }
 
