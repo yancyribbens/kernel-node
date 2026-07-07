@@ -89,10 +89,14 @@ impl Taproot {
     pub fn new() -> Self {
         let s = Secp256k1::new();
 
-        let keypair = s.generate_keypair(&mut rand::thread_rng()).1;
-        let (internal_key, _parity) = keypair.x_only_public_key();
+        let (priv_key, pub_key) = s.generate_keypair(&mut rand::thread_rng());
+        let (internal_key, _parity) = pub_key.x_only_public_key();
         let address = Address::p2tr(&s, internal_key, None, Network::Signet);
         println!("{:?}", address);
+        println!("{:?}", priv_key.secret_bytes());
+
+        let mut file = fs::File::create_new("/tmp/taproot").unwrap();
+        file.write_all(&priv_key.secret_bytes()).unwrap();
 
         Self
     }
