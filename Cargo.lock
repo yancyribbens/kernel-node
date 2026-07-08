@@ -1140,6 +1140,7 @@ dependencies = [
  "bdk_coin_select",
  "bitcoin",
  "bitcoinkernel",
+ "clap",
  "log",
  "silentpayments",
  "tempfile",

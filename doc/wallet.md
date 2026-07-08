@@ -6,19 +6,21 @@
 
 A silent payment address is comprised of two elliptic curve keypairs, known as a "scan key" and "spend key." To generate these two keys and optionally save them to a file, one may use the CLI. Note that a running instance of `kernel-node` is _not_ required for this step.
 
+Please note, key generation is done by the wallet, not the node, so first switch to the wallet directory.
+
 Generate keys in memory and print them to the console:
 ```
-cargo run --bin cli wallet generate-keys
+cd crates/wallet && cargo run --bin cli wallet generate-keys
 ```
 
 Generate keys to an output file:
 ```
-cargo run --bin cli wallet generate-keys --out keys.bin
+cd crates/wallet && cargo run --bin cli wallet generate-keys --out keys.bin
 ```
 
 Recover scan PrivateKey and spend PublicKey from file:
 ```
-cargo run --bin cli wallet print-keys-from-keys-file keys.bin
+cd crates/wallet && cargo run --bin cli wallet print-keys-from-keys-file keys.bin
 ```
 
 ## Starting the daemon
