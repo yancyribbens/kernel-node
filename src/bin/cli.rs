@@ -125,35 +125,34 @@ async fn connect_server(datadir_path: &str) -> server::Client {
 fn main() {
     let cli = Args::parse();
 
-    if let Commands::Wallet(WalletCmd::GenerateKeys { out }) = &cli.commands {
-        let (scan_priv, spend_priv, spend_pub) = generate_keys();
-        match out {
-            Some(path) => {
-                let file = SilentPaymentKeysFile::new(scan_priv, SpendKey::Secret(spend_priv));
-                file.save(path).expect("failed to write keys file");
-                eprintln!("Wrote silent payment keys to {}", path.display());
-                eprintln!("spend_pub={}", spend_pub);
-            }
-            None => {
-                eprintln!("WARNING: scan_key and spend_priv must be kept secret — anyone with them can spend received funds.");
-                println!("scan_key={}", scan_priv.display_secret());
-                println!("spend_priv={}", spend_priv.display_secret());
-                println!("spend_pub={}", spend_pub);
+    match cli.commands {
+        Commands::Wallet(WalletCmd::GenerateKeys { out }) => {
+            let (scan_priv, spend_priv, spend_pub) = generate_keys();
+            match out {
+                Some(path) => {
+                    let file = SilentPaymentKeysFile::new(scan_priv, SpendKey::Secret(spend_priv));
+                    file.save(&path).expect("failed to write keys file");
+                    eprintln!("Wrote silent payment keys to {}", path.display());
+                    eprintln!("spend_pub={}", spend_pub);
+                }
+                None => {
+                    eprintln!("WARNING: scan_key and spend_priv must be kept secret — anyone with them can spend received funds.");
+                    println!("scan_key={}", scan_priv.display_secret());
+                    println!("spend_priv={}", spend_priv.display_secret());
+                    println!("spend_pub={}", spend_pub);
+                }
             }
         }
-        return;
-    }
+        Commands::Wallet(WalletCmd::PrintKeysFromKeysFile { path }) => {
+            let read = SilentPaymentKeysFile::load(&path)
+                .expect("file path provided should be readable as a silent payments keys file");
 
-    if let Commands::Wallet(WalletCmd::PrintKeysFromKeysFile { path }) = &cli.commands {
-        let read = SilentPaymentKeysFile::load(path)
-            .expect("file path provided should be readable as a silent payments keys file");
+            let spend_pub = read.spend_xonly();
+            eprintln!("spend_pub={}", spend_pub);
 
-        let spend_pub = read.spend_xonly();
-        eprintln!("spend_pub={}", spend_pub);
-
-        let scan_priv = read.scan_key;
-        eprintln!("scan_key={}", scan_priv.display_secret());
-        return;
+            let scan_priv = read.scan_key;
+            eprintln!("scan_key={}", scan_priv.display_secret());
+        }
     }
 
     let rt = tokio::runtime::Builder::new_current_thread()
