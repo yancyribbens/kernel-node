@@ -33,9 +33,8 @@ enum WalletCmd {
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    PrintKeysFromKeysFile {
-        path: PathBuf,
-    },
+    /// Print scan_key, spend_priv and spend_pub keys to stdout from file.
+    PrintKeysFromKeysFile { path: PathBuf },
 }
 
 fn main() {
