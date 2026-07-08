@@ -45,6 +45,26 @@ struct Echo {
     message: String,
 }
 
+async fn connect_server(datadir_path: &str) -> server::Client {
+    let sock_file = datadir_path.to_owned() + "/node.sock";
+    let stream = UnixStream::connect(&sock_file)
+        .await
+        .expect("Could not connect to node.sock. Is `node` running?");
+    let (reader, writer) = stream.into_split();
+    let buf_reader = futures::io::BufReader::new(reader.compat());
+    let buf_writer = futures::io::BufWriter::new(writer.compat_write());
+    let network = capnp_rpc::twoparty::VatNetwork::new(
+        buf_reader,
+        buf_writer,
+        capnp_rpc::rpc_twoparty_capnp::Side::Client,
+        Default::default(),
+    );
+    let mut rpc_system = capnp_rpc::RpcSystem::new(Box::new(network), None);
+    let client: server::Client = rpc_system.bootstrap(capnp_rpc::rpc_twoparty_capnp::Side::Server);
+    tokio::task::spawn_local(rpc_system);
+    client
+}
+
 #[derive(Debug, Clone, clap::Subcommand)]
 enum WalletCmd {
     /// Generate fresh scan and spend keys for receiving silent payments.
@@ -91,55 +111,8 @@ enum WalletCmd {
     },
 }
 
-fn generate_keys() -> (SecretKey, SecretKey, XOnlyPublicKey) {
-    let secp = Secp256k1::new();
-    let scan_priv = SecretKey::new(&mut OsRng);
-    let spend_priv = SecretKey::new(&mut OsRng);
-    let (spend_xonly, _) = spend_priv.public_key(&secp).x_only_public_key();
-    (scan_priv, spend_priv, spend_xonly)
-}
-
-async fn connect_server(datadir_path: &str) -> server::Client {
-    let sock_file = datadir_path.to_owned() + "/node.sock";
-    let stream = UnixStream::connect(&sock_file)
-        .await
-        .expect("Could not connect to node.sock. Is `node` running?");
-    let (reader, writer) = stream.into_split();
-    let buf_reader = futures::io::BufReader::new(reader.compat());
-    let buf_writer = futures::io::BufWriter::new(writer.compat_write());
-    let network = capnp_rpc::twoparty::VatNetwork::new(
-        buf_reader,
-        buf_writer,
-        capnp_rpc::rpc_twoparty_capnp::Side::Client,
-        Default::default(),
-    );
-    let mut rpc_system = capnp_rpc::RpcSystem::new(Box::new(network), None);
-    let client: server::Client = rpc_system.bootstrap(capnp_rpc::rpc_twoparty_capnp::Side::Server);
-    tokio::task::spawn_local(rpc_system);
-    client
-}
-
 fn main() {
     let cli = Args::parse();
-
-    if let Commands::Wallet(WalletCmd::GenerateKeys { out }) = &cli.commands {
-        let (scan_priv, spend_priv, spend_pub) = generate_keys();
-        match out {
-            Some(path) => {
-                let file = SilentPaymentKeysFile::new(scan_priv, SpendKey::Secret(spend_priv));
-                file.save(path).expect("failed to write keys file");
-                eprintln!("Wrote silent payment keys to {}", path.display());
-                eprintln!("spend_pub={}", spend_pub);
-            }
-            None => {
-                eprintln!("WARNING: scan_key and spend_priv must be kept secret — anyone with them can spend received funds.");
-                println!("scan_key={}", scan_priv.display_secret());
-                println!("spend_priv={}", spend_priv.display_secret());
-                println!("spend_pub={}", spend_pub);
-            }
-        }
-        return;
-    }
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
