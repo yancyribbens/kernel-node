@@ -36,12 +36,14 @@ enum WalletCmd {
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// Generate Taproot Address
+    /// Generate Taproot Address.
     GenerateTaprootAddress {
         /// Write the keys to this binary file. Must not already exist.
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Read Taproot Address from file.
+    PrintTaprootAddressFromKeysFile { path: PathBuf },
     /// Print scan_key, spend_priv and spend_pub keys to stdout from file.
     PrintKeysFromKeysFile { path: PathBuf },
 }
@@ -94,6 +96,12 @@ fn main() {
                     println!("private key={:?}", priv_key);
                 }
             }
+        },
+        Commands::Wallet(WalletCmd::PrintTaprootAddressFromKeysFile { path }) => {
+            let read = KeysFile::load(&path)
+                .expect("file path provided should be readable as a silent payments keys file");
+            let addr = read.address();
+            println!("address={}", addr);
         },
         Commands::Wallet(WalletCmd::PrintKeysFromKeysFile { path }) => {
             let read = SilentPaymentKeysFile::load(&path)
