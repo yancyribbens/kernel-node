@@ -43,6 +43,10 @@ pub struct SilentPaymentKeysFile {
     spend: SpendKey,
 }
 
+pub struct KeysFile {
+    secret_key: SecretKey,
+}
+
 #[derive(Debug)]
 pub enum KeysFileError {
     Io(io::Error),
@@ -78,6 +82,21 @@ impl From<io::Error> for KeysFileError {
 impl From<secp256k1::Error> for KeysFileError {
     fn from(e: secp256k1::Error) -> Self {
         KeysFileError::InvalidKey(e)
+    }
+}
+
+impl KeysFile {
+    pub fn new(secret_key: SecretKey) -> Self {
+        Self { secret_key }
+    }
+
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.secret_key.secret_bytes()
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, KeysFileError> {
+        let secret_key = SecretKey::from_slice(&bytes)?;
+        Ok(Self { secret_key })
     }
 }
 
@@ -141,6 +160,22 @@ impl SilentPaymentKeysFile {
 }
 
 impl FileExt for SilentPaymentKeysFile {
+    type Error = KeysFileError;
+
+    /// Refuses to overwrite (`AlreadyExists`).
+    fn save(&self, path: &Path) -> Result<(), Self::Error> {
+        let mut file = fs::File::create_new(path)?;
+        file.write_all(&self.to_bytes())?;
+        Ok(())
+    }
+
+    fn load(path: &Path) -> Result<Self, Self::Error> {
+        let bytes = fs::read(path)?;
+        Self::from_bytes(&bytes)
+    }
+}
+
+impl FileExt for KeysFile {
     type Error = KeysFileError;
 
     /// Refuses to overwrite (`AlreadyExists`).
