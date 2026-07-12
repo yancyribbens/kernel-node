@@ -39,8 +39,8 @@ impl SpendKey {
 /// secret, 1-byte spend tag, 32-byte spend material. 69 bytes total.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SilentPaymentKeysFile {
-    pub scan_key: SecretKey,
-    pub spend: SpendKey,
+    scan_key: SecretKey,
+    spend: SpendKey,
 }
 
 #[derive(Debug)]
@@ -88,6 +88,14 @@ impl SilentPaymentKeysFile {
 
     pub fn spend_xonly(&self) -> XOnlyPublicKey {
         self.spend.xonly()
+    }
+
+    pub fn spend(&self) -> SpendKey {
+        self.spend
+    }
+
+    pub fn scan_key(&self) -> SecretKey {
+        self.scan_key
     }
 
     pub fn to_bytes(&self) -> [u8; FILE_LEN] {

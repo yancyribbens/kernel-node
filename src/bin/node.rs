@@ -532,9 +532,9 @@ fn run(
 fn auto_import_keys(wallet: &mut Wallet, path: &str) {
     let file = SilentPaymentKeysFile::load(std::path::Path::new(path))
         .unwrap_or_else(|e| panic!("Failed to load silent payment keys from {path}: {e}"));
-    let result = match file.spend {
-        SpendKey::Secret(spend_secret) => wallet.import_signing_keys(file.scan_key, spend_secret),
-        SpendKey::XOnlyPublic(spend_xonly) => wallet.import_keys(file.scan_key, spend_xonly),
+    let result = match file.spend() {
+        SpendKey::Secret(spend_secret) => wallet.import_signing_keys(file.scan_key(), spend_secret),
+        SpendKey::XOnlyPublic(spend_xonly) => wallet.import_keys(file.scan_key(), spend_xonly),
     };
     result.unwrap_or_else(|e| panic!("Failed to build silent payment receiver from {path}: {e}"));
     info!(
