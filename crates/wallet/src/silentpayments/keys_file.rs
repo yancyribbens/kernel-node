@@ -4,7 +4,9 @@ use std::{
     path::Path,
 };
 
+use bitcoin::key::Keypair;
 use bitcoin::secp256k1::{self, Secp256k1, SecretKey, XOnlyPublicKey};
+use bitcoin::{Address, Network};
 
 use crate::io::FileExt;
 
@@ -94,11 +96,11 @@ impl KeysFile {
         self.secret_key.secret_bytes()
     }
 
-    pub fn address(&self) -> bitcoin::Address {
+    pub fn address(&self) -> Address {
         let secp = Secp256k1::new();
-        let key_p = bitcoin::key::Keypair::from_secret_key(&secp, &self.secret_key);
+        let key_p = Keypair::from_secret_key(&secp, &self.secret_key);
         let x_only = key_p.x_only_public_key();
-        bitcoin::Address::p2tr(&secp, x_only.0, None, bitcoin::Network::Signet)
+        Address::p2tr(&secp, x_only.0, None, Network::Signet)
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, KeysFileError> {

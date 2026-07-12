@@ -6,7 +6,7 @@ mod wallet_store;
 
 pub use ::silentpayments::receiving::{Label, Receiver};
 pub use ::silentpayments::{Network, SilentPaymentAddress};
-pub use keys_file::{SilentPaymentKeysFile, KeysFile, SpendKey};
+pub use keys_file::{KeysFile, SilentPaymentKeysFile, SpendKey};
 pub use scanning::{scan_transaction, InputData};
 pub use sending::{Recipient, SendError};
 pub use wallet::{Coin, HistoryEntry, SilentPaymentKeys, SpentBy, Wallet};

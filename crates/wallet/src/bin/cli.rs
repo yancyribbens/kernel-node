@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use bitcoin::secp256k1::{rand::rngs::OsRng, Secp256k1, SecretKey, XOnlyPublicKey};
-use clap::Parser;
-use wallet::io::FileExt;
-use wallet::silentpayments::{SilentPaymentKeysFile, KeysFile, SpendKey};
 use bitcoin::key::rand;
+use bitcoin::secp256k1::{rand::rngs::OsRng, Secp256k1, SecretKey, XOnlyPublicKey};
 use bitcoin::Address;
 use bitcoin::Network;
+use clap::Parser;
+use wallet::io::FileExt;
+use wallet::silentpayments::{KeysFile, SilentPaymentKeysFile, SpendKey};
 
 #[derive(clap::Parser)]
 #[command(author, version, about, long_about = None)]
@@ -76,7 +76,7 @@ fn main() {
                     println!("spend_pub={}", spend_pub);
                 }
             }
-        },
+        }
         Commands::Wallet(WalletCmd::GenerateTaprootAddress { out }) => {
             let s = Secp256k1::new();
             let (priv_key, pub_key) = s.generate_keypair(&mut rand::thread_rng());
@@ -96,13 +96,13 @@ fn main() {
                     println!("private key={:?}", priv_key);
                 }
             }
-        },
+        }
         Commands::Wallet(WalletCmd::PrintTaprootAddressFromKeysFile { path }) => {
             let read = KeysFile::load(&path)
                 .expect("file path provided should be readable as a silent payments keys file");
             let addr = read.address();
             println!("address={}", addr);
-        },
+        }
         Commands::Wallet(WalletCmd::PrintKeysFromKeysFile { path }) => {
             let read = SilentPaymentKeysFile::load(&path)
                 .expect("file path provided should be readable as a silent payments keys file");
