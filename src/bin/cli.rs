@@ -69,9 +69,8 @@ enum WalletCmd {
         /// 32-byte x-only spend public key as hex.
         spend_key: String,
     },
-    PrintKeysFromKeysFile {
-        path: PathBuf,
-    },
+    /// Print scan_key, spend_priv and spend_pub keys to stdout from file.
+    PrintKeysFromKeysFile { path: PathBuf },
     /// Show wallet balance.
     Balance,
     /// Show wallet transaction history.
