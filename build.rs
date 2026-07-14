@@ -8,6 +8,7 @@ fn main() -> Result<(), configure_me_codegen::Error> {
         .src_prefix("capnp")
         .file("capnp/server.capnp")
         .file("capnp/wallet.capnp")
+        .file("capnp/chain.capnp")
         .run()
         .unwrap();
     configure_me_codegen::build_script_auto()

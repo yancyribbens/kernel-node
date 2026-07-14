@@ -34,9 +34,18 @@ enum Commands {
     Echo(Echo),
     /// Terminate the server.
     Stop,
+    /// Chain commands.
+    #[command(subcommand)]
+    Chain(ChainCmd),
     /// Wallet commands.
     #[command(subcommand)]
     Wallet(WalletCmd),
+}
+
+#[derive(Debug, Clone, clap::Subcommand)]
+enum ChainCmd {
+    /// Show the current chain tip.
+    Tip,
 }
 
 #[derive(Debug, Clone, clap::Args)]
@@ -194,6 +203,20 @@ fn main() {
                 let shutdown_req = client.shutdown_request();
                 shutdown_req.send().promise.await.unwrap();
                 println!("Kernel node stopping...");
+            }
+            Commands::Chain(cmd) => {
+                let chain_response = client.make_chain_request().send().promise.await.unwrap();
+                let client = chain_response.get().unwrap().get_chain().unwrap();
+                match cmd {
+                    ChainCmd::Tip => {
+                        let req = client.get_tip_request();
+                        let result = req.send().promise.await.unwrap();
+                        let r = result.get().unwrap();
+                        let height = r.get_height();
+                        let hash = r.get_hash().unwrap().to_string().unwrap();
+                        println!("height={height} hash={hash}");
+                    }
+                }
             }
             Commands::Wallet(cmd) => {
                 let wallet_response = client.make_wallet_request().send().promise.await.unwrap();

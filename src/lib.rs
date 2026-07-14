@@ -86,3 +86,4 @@ pub fn resolve_seeds(network: Network) -> Vec<IpAddr> {
 
 capnp::generated_code!(pub mod server_capnp);
 capnp::generated_code!(pub mod wallet_capnp);
+capnp::generated_code!(pub mod chain_capnp);

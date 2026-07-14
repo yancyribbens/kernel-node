@@ -1,17 +1,19 @@
 use std::sync::{mpsc, Arc, Mutex};
 
 use bitcoin::consensus::Decodable;
+use bitcoin::hashes::Hash;
 use bitcoin::secp256k1::{SecretKey, XOnlyPublicKey};
-use bitcoin::{Amount, FeeRate, Transaction};
+use bitcoin::{Amount, BlockHash, FeeRate, Transaction};
+use bitcoinkernel::{core::BlockHashExt, ChainstateManager};
 use wallet::silentpayments::{Recipient, Wallet};
 
-use crate::{server_capnp, wallet_capnp};
+use crate::{chain_capnp, server_capnp, wallet_capnp};
 
-#[derive(Debug)]
 pub struct IpcInterface {
     tx: mpsc::Sender<()>,
     broadcast_tx: mpsc::SyncSender<Transaction>,
     state: Arc<Mutex<Wallet>>,
+    chainman: Arc<ChainstateManager>,
 }
 
 impl IpcInterface {
@@ -19,11 +21,13 @@ impl IpcInterface {
         tx: mpsc::Sender<()>,
         broadcast_tx: mpsc::SyncSender<Transaction>,
         state: Arc<Mutex<Wallet>>,
+        chainman: Arc<ChainstateManager>,
     ) -> Self {
         Self {
             tx,
             broadcast_tx,
             state,
+            chainman,
         }
     }
 }
@@ -61,6 +65,44 @@ impl server_capnp::server::Server for IpcInterface {
             self.broadcast_tx.clone(),
         ));
         results.get().set_wallet(client);
+        Ok(())
+    }
+
+    async fn make_chain(
+        self: capnp::capability::Rc<Self>,
+        _: server_capnp::server::MakeChainParams,
+        mut results: server_capnp::server::MakeChainResults,
+    ) -> Result<(), capnp::Error> {
+        let client: chain_capnp::chain::Client =
+            capnp_rpc::new_client(ChainIpcInterface::new(self.chainman.clone()));
+        results.get().set_chain(client);
+        Ok(())
+    }
+}
+
+pub struct ChainIpcInterface {
+    chainman: Arc<ChainstateManager>,
+}
+
+impl ChainIpcInterface {
+    pub fn new(chainman: Arc<ChainstateManager>) -> Self {
+        Self { chainman }
+    }
+}
+
+impl chain_capnp::chain::Server for ChainIpcInterface {
+    async fn get_tip(
+        self: capnp::capability::Rc<Self>,
+        _: chain_capnp::chain::GetTipParams,
+        mut results: chain_capnp::chain::GetTipResults,
+    ) -> Result<(), capnp::Error> {
+        let tip = self.chainman.active_chain().tip();
+        let height = tip.height();
+        let hash = BlockHash::from_byte_array(tip.block_hash().to_bytes());
+
+        let mut r = results.get();
+        r.set_height(height as u32);
+        r.set_hash(hash.to_string());
         Ok(())
     }
 }
