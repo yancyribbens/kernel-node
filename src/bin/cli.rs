@@ -130,8 +130,8 @@ fn main() {
             Some(path) => {
                 let file = SilentPaymentKeysFile::new(scan_priv, SpendKey::Secret(spend_priv));
                 file.save(path).expect("failed to write keys file");
-                eprintln!("Wrote silent payment keys to {}", path.display());
-                eprintln!("spend_pub={}", spend_pub);
+                println!("Wrote silent payment keys to {}", path.display());
+                println!("spend_pub={}", spend_pub);
             }
             None => {
                 eprintln!("WARNING: scan_key and spend_priv must be kept secret — anyone with them can spend received funds.");
