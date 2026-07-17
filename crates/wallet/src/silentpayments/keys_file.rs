@@ -39,8 +39,8 @@ impl SpendKey {
 /// secret, 1-byte spend tag, 32-byte spend material. 69 bytes total.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SilentPaymentKeysFile {
-    pub scan_key: SecretKey,
-    pub spend: SpendKey,
+    scan_key: SecretKey,
+    spend_key: SpendKey,
 }
 
 #[derive(Debug)]
@@ -82,12 +82,23 @@ impl From<secp256k1::Error> for KeysFileError {
 }
 
 impl SilentPaymentKeysFile {
-    pub fn new(scan_key: SecretKey, spend: SpendKey) -> Self {
-        Self { scan_key, spend }
+    pub fn new(scan_key: SecretKey, spend_key: SpendKey) -> Self {
+        Self {
+            scan_key,
+            spend_key,
+        }
     }
 
     pub fn spend_xonly(&self) -> XOnlyPublicKey {
-        self.spend.xonly()
+        self.spend_key.xonly()
+    }
+
+    pub fn spend_key(&self) -> SpendKey {
+        self.spend_key
+    }
+
+    pub fn scan_key(&self) -> SecretKey {
+        self.scan_key
     }
 
     pub fn to_bytes(&self) -> [u8; FILE_LEN] {
@@ -97,7 +108,7 @@ impl SilentPaymentKeysFile {
         off += MAGIC.len();
         buf[off..off + KEY_LEN].copy_from_slice(&self.scan_key.secret_bytes());
         off += KEY_LEN;
-        match &self.spend {
+        match &self.spend_key {
             SpendKey::Secret(sk) => {
                 buf[off] = SPEND_TAG_SECRET;
                 buf[off + TAG_LEN..].copy_from_slice(&sk.secret_bytes());
@@ -123,12 +134,15 @@ impl SilentPaymentKeysFile {
         let scan_key = SecretKey::from_slice(&body[..KEY_LEN])?;
         let tag = body[KEY_LEN];
         let spend_bytes = &body[KEY_LEN + TAG_LEN..];
-        let spend = match tag {
+        let spend_key = match tag {
             SPEND_TAG_SECRET => SpendKey::Secret(SecretKey::from_slice(spend_bytes)?),
             SPEND_TAG_XONLY_PUB => SpendKey::XOnlyPublic(XOnlyPublicKey::from_slice(spend_bytes)?),
             other => return Err(KeysFileError::UnknownSpendTag(other)),
         };
-        Ok(Self { scan_key, spend })
+        Ok(Self {
+            scan_key,
+            spend_key,
+        })
     }
 }
 

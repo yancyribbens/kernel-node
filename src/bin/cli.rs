@@ -150,7 +150,7 @@ fn main() {
         let spend_pub = read.spend_xonly();
         eprintln!("spend_pub={}", spend_pub);
 
-        let scan_priv = read.scan_key;
+        let scan_priv = read.scan_key();
         eprintln!("scan_key={}", scan_priv.display_secret());
         return;
     }
