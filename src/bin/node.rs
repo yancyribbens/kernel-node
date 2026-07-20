@@ -660,6 +660,7 @@ fn main() {
     }
 
     let wallet_for_ipc = Arc::clone(&wallet);
+    let chainman_for_ipc = Arc::clone(&node_state.chainman);
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -685,6 +686,7 @@ fn main() {
                         };
                         debug!(target: Category::IPC, "Handling inbound IPC call");
                         let state = Arc::clone(&wallet_for_ipc);
+                        let chainman = Arc::clone(&chainman_for_ipc);
                         let (reader, writer) = stream.into_split();
                         let buf_reader = futures::io::BufReader::new(reader.compat());
                         let buf_writer = futures::io::BufWriter::new(writer.compat_write());
@@ -698,6 +700,7 @@ fn main() {
                             ipc_shutdown.clone(),
                             broadcast_tx.clone(),
                             state,
+                            chainman,
                         ));
                         let rpc_system =
                             capnp_rpc::RpcSystem::new(Box::new(network), Some(client.client));
