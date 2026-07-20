@@ -339,7 +339,9 @@ fn run(
     let peer_processing_handler = thread::spawn(move || {
         info!(target: Category::NODE, "Starting net processing thread.");
         while running_peer.load(Ordering::SeqCst) {
-            let socket_addr = {
+            let socket_addr = if let Some(addr) = connect {
+                Some(addr)
+            } else {
                 let addr_lock = peer_source.lock().unwrap();
                 let (address, port) = addr_lock.select().unwrap().network_addr();
                 match address {
@@ -481,8 +483,9 @@ fn run(
 
     let feeler_thread = std::thread::spawn(move || {
         info!(target: Category::NODE, "Starting feeler thread.");
+        let mut last_feeler = Instant::now();
         while running_feelers.load(Ordering::SeqCst) {
-            match broadcast_rx.recv_timeout(Duration::from_secs(30)) {
+            match broadcast_rx.recv_timeout(Duration::from_secs(1)) {
                 Ok(tx) => {
                     let delivered = {
                         let mut table = addrman_for_feelers.lock().unwrap();
@@ -501,8 +504,11 @@ fn run(
                     }
                 }
                 Err(RecvTimeoutError::Timeout) => {
-                    let mut table = addrman_for_feelers.lock().unwrap();
-                    open_feeler(table.deref_mut(), network);
+                    if Instant::now().duration_since(last_feeler) > Duration::from_secs(30) {
+                        let mut table = addrman_for_feelers.lock().unwrap();
+                        open_feeler(table.deref_mut(), network);
+                        last_feeler = Instant::now();
+                    }
                 }
                 Err(RecvTimeoutError::Disconnected) => break,
             }
