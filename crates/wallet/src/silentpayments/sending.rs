@@ -11,7 +11,7 @@ use bitcoin::{
     absolute::LockTime, taproot, Address, Amount, FeeRate, OutPoint, ScriptBuf, Sequence,
     Transaction, TxIn, TxOut, Weight, Witness,
 };
-use bitcoin_coin_selection::{select_coins, WeightedUtxo};
+use bitcoin_coin_selection::{select_coins, Spendable};
 use silentpayments::sending::generate_recipient_pubkeys;
 use silentpayments::utils::sending::calculate_partial_secret;
 use silentpayments::{Network, SilentPaymentAddress};
@@ -151,15 +151,13 @@ struct SpendableCoin<'a> {
     coin: &'a Coin,
 }
 
-impl WeightedUtxo for SpendableCoin<'_> {
-    fn satisfaction_weight(&self) -> Weight {
-        // see rust-bitcoin InputWeightPrediction P2TR_KEY_DEFAULT_SIGHASH
-        // for full calculation, see InputWeightPrediction::from_slice()
-        // 1 witness_len + 1 item len +  64 signature
-        Weight::from_wu(66)
+impl Spendable for SpendableCoin<'_> {
+    fn weight(&self) -> bitcoin::compat::Weight {
+        Weight::from_wu(66).to_stable()
     }
-    fn value(&self) -> Amount {
-        self.coin.value
+
+    fn value(&self) -> bitcoin::compat::Amount {
+        self.coin.value.to_stable().unwrap()
     }
 }
 
@@ -234,8 +232,15 @@ fn build_transaction(
     }
 
     let cost_of_change = default_tr_cost_of_change(fee_rate, discard_fee_rate);
-    let selection = select_coins(target, cost_of_change, fee_rate, long_term_fee_rate, coins);
-    let selected = if let Some((_i, utxos)) = selection {
+    let selection = select_coins(
+        target.to_stable().unwrap(),
+        cost_of_change.to_stable().unwrap(),
+        Weight::MAX.to_stable(),
+        fee_rate.to_stable(),
+        long_term_fee_rate.to_stable(),
+        coins
+    );
+    let selected = if let Ok((_i, utxos)) = selection {
         utxos
     } else {
         return Err(SendError::NoSpendableCoins);
@@ -246,10 +251,14 @@ fn build_transaction(
         .map(|c| spend_secret.add_tweak(&c.coin.tweak))
         .collect::<Result<_, secp256k1::Error>>()?;
 
-    let selected_sum: Amount = selected.iter().map(|u| u.value()).sum();
+    let selected_sum: Amount = selected.iter().map(|u| {
+        Amount::from_stable(u.value())
+    }).sum();
     let fee_total = selected
         .iter()
-        .map(|u| u.calculate_fee(fee_rate).unwrap())
+        .map(|_u| {
+            fee_rate.checked_mul_by_weight(Weight::from_wu(66)).unwrap()
+        })
         .sum();
     let change_value: Amount = selected_sum - target - fee_total;
 
