@@ -1,7 +1,7 @@
 use bitcoin::{consensus::encode, hashes::Hash, Network};
 use bitcoinkernel::{core::BlockHashExt, Block as KernelBlock, BlockTreeEntry, ChainType};
 use std::{fs, path::PathBuf};
-use wallet::silentpayments::Network as WalletNetwork;
+//use wallet::silentpayments::Network as WalletNetwork;
 
 pub trait ChainExt {
     fn chain_type(&self) -> ChainType;
@@ -52,32 +52,32 @@ impl<S: AsRef<str>> DirnameExt for S {
     }
 }
 
-pub trait NetworkExt {
+//pub trait NetworkExt {
     // The P2P port for a given [`Network`].
-    fn default_p2p_port(self) -> u16;
-    fn wallet_network(self) -> WalletNetwork;
-}
+    //fn default_p2p_port(self) -> u16;
+    //fn wallet_network(self) -> WalletNetwork;
+//}
 
-impl NetworkExt for Network {
+//impl NetworkExt for Network {
     // The P2P port for a given [`Network`].
-    fn default_p2p_port(self) -> u16 {
-        match &self {
-            Self::Bitcoin => 8333,
-            Self::Signet => 38333,
-            Self::Testnet => 18333,
-            Self::Testnet4 => 48333,
-            Self::Regtest => 18444,
-        }
-    }
+    //fn default_p2p_port(self) -> u16 {
+        //match &self {
+            //Self::Bitcoin => 8333,
+            //Self::Signet => 38333,
+            //Self::Testnet => 18333,
+            //Self::Testnet4 => 48333,
+            //Self::Regtest => 18444,
+        //}
+    //}
 
-    fn wallet_network(self) -> WalletNetwork {
-        match self {
-            Self::Bitcoin => WalletNetwork::Mainnet,
-            Self::Regtest => WalletNetwork::Regtest,
-            _ => WalletNetwork::Testnet,
-        }
-    }
-}
+    //fn wallet_network(self) -> WalletNetwork {
+        //match self {
+            //Self::Bitcoin => WalletNetwork::Mainnet,
+            //Self::Regtest => WalletNetwork::Regtest,
+            //_ => WalletNetwork::Testnet,
+        //}
+    //}
+//}
 
 pub trait KernelBlockExt {
     fn convert(self) -> bitcoin::Block;

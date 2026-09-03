@@ -5,7 +5,8 @@ use bitcoin::hashes::Hash;
 use bitcoin::secp256k1::{SecretKey, XOnlyPublicKey};
 use bitcoin::{Amount, BlockHash, FeeRate, Transaction};
 use bitcoinkernel::{core::BlockHashExt, ChainstateManager};
-use wallet::silentpayments::{Recipient, Wallet};
+use rutabaga::wallet::Wallet;
+use std::str::FromStr;
 
 use crate::{chain_capnp, server_capnp, wallet_capnp};
 
@@ -167,19 +168,19 @@ impl wallet_capnp::wallet::Server for WalletIpcInterface {
     async fn get_history(
         self: capnp::capability::Rc<Self>,
         _: wallet_capnp::wallet::GetHistoryParams,
-        mut results: wallet_capnp::wallet::GetHistoryResults,
+        _results: wallet_capnp::wallet::GetHistoryResults,
     ) -> Result<(), capnp::Error> {
-        let wallet = self.state.lock().unwrap();
-        let history = wallet.history();
-        drop(wallet);
+        //let wallet = self.state.lock().unwrap();
+        //let history = wallet.history();
+        //drop(wallet);
 
-        let text = history
-            .iter()
-            .map(|e| e.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
+        //let text = history
+            //.iter()
+            //.map(|e| e.to_string())
+            //.collect::<Vec<_>>()
+            //.join("\n");
 
-        results.get().set_entries(&text);
+        //results.get().set_entries(&text);
         Ok(())
     }
 
@@ -243,9 +244,8 @@ impl wallet_capnp::wallet::Server for WalletIpcInterface {
             FeeRate::from_sat_per_kwu((long_term_fee_rate_sat_per_vb * 250.0).ceil() as u64);
 
         let mut wallet = self.state.lock().unwrap();
-        let build = Recipient::parse(&address, wallet.network).and_then(|recipient| {
-            wallet.build_transaction(recipient, amount, fee_rate, long_term_fee_rate)
-        });
+        let btc_address = bitcoin::Address::from_str(&address).unwrap().assume_checked();
+        let build = wallet.build_transaction(btc_address, amount, fee_rate, long_term_fee_rate);
         let tx = match build {
             Ok(tx) => tx,
             Err(e) if e.is_user_error() => {

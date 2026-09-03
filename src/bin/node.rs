@@ -24,7 +24,7 @@ use bitcoinkernel::{
 };
 use kernel_node::{
     daemonize::Daemonize,
-    ext::{ChainExt, DirnameExt, NetworkExt},
+    ext::{ChainExt, DirnameExt},
     ipc::IpcInterface,
     logging::Category,
     peer::{NodeState, TipState},
@@ -38,11 +38,11 @@ use p2p::{
     handshake::ConnectionConfig,
     net::{ConnectionExt, ConnectionReader, TimeoutParams},
 };
-use std::path::PathBuf;
 use tokio::net::UnixListener;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use wallet::io::FileExt;
-use wallet::silentpayments::{SilentPaymentKeysFile, SpendKey, Wallet, WalletStore};
+use rutabaga::wallet::Wallet;
+//use wallet::io::FileExt;
+//use wallet::silentpayments::{SilentPaymentKeysFile, SpendKey, Wallet, WalletStore};
 
 const TABLE_WIDTH: usize = 16;
 const TABLE_SLOT: usize = 16;
@@ -62,7 +62,7 @@ fn create_context(
     chain_type: ChainType,
     fatal: FatalShutdown,
     tip_state: &Arc<Mutex<TipState>>,
-    wallet: Arc<Mutex<Wallet>>,
+    _wallet: Arc<Mutex<Wallet>>,
     chainman_holder: Arc<std::sync::OnceLock<Arc<ChainstateManager>>>,
     scan_tx: mpsc::Sender<ScanEvent>,
 ) -> Arc<Context> {
@@ -74,9 +74,9 @@ fn create_context(
     Arc::new(ContextBuilder::new()
         .chain_type(chain_type)
         .with_block_connected_validation(move |block: bitcoinkernel::Block, entry: bitcoinkernel::BlockTreeEntry<'_>| {
-            if wallet.lock().unwrap().keys.is_none() {
-                return;
-            }
+            //if wallet.lock().unwrap().keys.is_none() {
+                //return;
+            //}
             let Some(chainman) = chainman_holder.get() else { return };
             match chainman.read_spent_outputs(&entry) {
                 Ok(spent_outputs) => {
@@ -275,7 +275,6 @@ fn run(
     scan_rx: mpsc::Receiver<ScanEvent>,
     broadcast_rx: mpsc::Receiver<Transaction>,
     wallet: Arc<Mutex<Wallet>>,
-    wallet_store: WalletStore,
     fatal: FatalShutdown,
 ) -> std::io::Result<()> {
     let mut table = addrman::Table::<TABLE_WIDTH, TABLE_SLOT, MAX_BUCKETS>::new();
@@ -304,13 +303,13 @@ fn run(
                 let record = match addr {
                     IpAddr::V4(ipv4) => addrman::Record::new(
                         AddrV2::Ipv4(*ipv4),
-                        network.default_p2p_port(),
+                        38333,
                         ServiceFlags::NETWORK,
                         &DNS_RESOLVER,
                     ),
                     IpAddr::V6(ipv6) => addrman::Record::new(
                         AddrV2::Ipv6(*ipv6),
-                        network.default_p2p_port(),
+                        38333, 
                         ServiceFlags::NETWORK,
                         &DNS_RESOLVER,
                     ),
@@ -396,7 +395,7 @@ fn run(
         info!(target: Category::NODE, "Stopping block processing thread.");
     });
 
-    let fatal_scan = fatal.clone();
+    //let fatal_scan = fatal.clone();
     let scan_processing_handler = thread::spawn(move || {
         info!(target: Category::NODE, "Starting scan thread.");
         while running_scan.load(Ordering::SeqCst) {
@@ -408,12 +407,12 @@ fn run(
                 }) => {
                     let mut wallet = wallet.lock().unwrap();
                     let count = wallet.scan_block(block, spent_outputs, block_height);
-                    if let Err(e) = wallet_store.save(&wallet) {
-                        fatal_scan.trigger(
-                            Category::WALLET,
-                            format!("Wallet save failed at height {block_height}: {e}"),
-                        );
-                    }
+                    //if let Err(e) = wallet_store.save(&wallet) {
+                        //fatal_scan.trigger(
+                            //Category::WALLET,
+                            //format!("Wallet save failed at height {block_height}: {e}"),
+                        //);
+                    //}
                     drop(wallet);
                     if count > 0 {
                         info!(
@@ -429,12 +428,12 @@ fn run(
                 }) => {
                     let mut wallet = wallet.lock().unwrap();
                     wallet.process_disconnect(block);
-                    if let Err(e) = wallet_store.save(&wallet) {
-                        fatal_scan.trigger(
-                            Category::WALLET,
-                            format!("Wallet save failed at disconnect of {block_height}: {e}"),
-                        );
-                    }
+                    //if let Err(e) = wallet_store.save(&wallet) {
+                        //fatal_scan.trigger(
+                            //Category::WALLET,
+                            //format!("Wallet save failed at disconnect of {block_height}: {e}"),
+                        //);
+                    //}
                     drop(wallet);
                     info!(target: Category::WALLET, "Disconnected block at height {}", block_height);
                 }
@@ -496,18 +495,18 @@ fn run(
     Ok(())
 }
 
-fn auto_import_keys(wallet: &mut Wallet, path: &str) {
-    let file = SilentPaymentKeysFile::load(std::path::Path::new(path))
-        .unwrap_or_else(|e| panic!("Failed to load silent payment keys from {path}: {e}"));
-    let result = match file.spend_key() {
-        SpendKey::Secret(spend_secret) => wallet.import_signing_keys(file.scan_key(), spend_secret),
-        SpendKey::XOnlyPublic(spend_xonly) => wallet.import_keys(file.scan_key(), spend_xonly),
-    };
-    result.unwrap_or_else(|e| panic!("Failed to build silent payment receiver from {path}: {e}"));
-    info!(
-        target: Category::NODE,
-        "Imported silent payment keys from {path}"
-    );
+fn auto_import_keys(_wallet: &mut Wallet, _path: &str) {
+    //let file = SilentPaymentKeysFile::load(std::path::Path::new(path))
+        //.unwrap_or_else(|e| panic!("Failed to load silent payment keys from {path}: {e}"));
+    //let result = match file.spend_key() {
+        //SpendKey::Secret(spend_secret) => wallet.import_signing_keys(file.scan_key(), spend_secret),
+        //SpendKey::XOnlyPublic(spend_xonly) => wallet.import_keys(file.scan_key(), spend_xonly),
+    //};
+    //result.unwrap_or_else(|e| panic!("Failed to build silent payment receiver from {path}: {e}"));
+    //info!(
+        //target: Category::NODE,
+        //"Imported silent payment keys from {path}"
+    //);
 }
 
 fn main() {
@@ -527,33 +526,35 @@ fn main() {
     let tip_state = Arc::new(Mutex::new(TipState::default()));
 
     let network = config.network.parse::<Network>().expect("invalid network");
-    let wallet_store = WalletStore::new(
-        PathBuf::from(config.datadir.data_dir()).join("wallet.bin"),
-        network.wallet_network(),
-    );
-    let initial_wallet = if wallet_store.exists() {
-        match wallet_store.load() {
-            Ok(loaded) => {
-                info!(
-                    target: Category::WALLET,
-                    "Loaded wallet from {} (scan_height={})",
-                    wallet_store.path().display(),
-                    loaded.scan_height
-                );
-                loaded
-            }
-            Err(e) => {
-                error!(
-                    target: Category::WALLET,
-                    "Failed to load wallet at {}: {e}",
-                    wallet_store.path().display()
-                );
-                std::process::exit(1);
-            }
-        }
-    } else {
-        Wallet::new(wallet_store.network())
-    };
+    //let wallet_store = WalletStore::new(
+        //PathBuf::from(config.datadir.data_dir()).join("wallet.bin"),
+        //network.wallet_network(),
+    //);
+    //let initial_wallet = if wallet_store.exists() {
+        //match wallet_store.load() {
+            //Ok(loaded) => {
+                //info!(
+                    //target: Category::WALLET,
+                    //"Loaded wallet from {} (scan_height={})",
+                    //wallet_store.path().display(),
+                    //loaded.scan_height
+                //);
+                //loaded
+            //}
+            //Err(e) => {
+                //error!(
+                    //target: Category::WALLET,
+                    //"Failed to load wallet at {}: {e}",
+                    //wallet_store.path().display()
+                //);
+                //std::process::exit(1);
+            //}
+        //}
+    //} else {
+        //Wallet::new(wallet_store.network())
+    //};
+
+    let initial_wallet = Wallet::new();
     let wallet = Arc::new(Mutex::new(initial_wallet));
     if let Some(path) = config.sp_keys_file.as_ref() {
         auto_import_keys(&mut wallet.lock().unwrap(), path);
@@ -682,7 +683,6 @@ fn main() {
         scan_rx,
         broadcast_rx,
         wallet,
-        wallet_store,
         fatal,
     )
     .unwrap();

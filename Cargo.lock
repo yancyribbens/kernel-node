@@ -797,11 +797,11 @@ dependencies = [
  "futures",
  "libc",
  "log",
+ "rutabaga",
  "silentpayments",
  "tempfile",
  "tokio",
  "tokio-util",
- "wallet",
 ]
 
 [[package]]
@@ -1106,6 +1106,15 @@ dependencies = [
  "ring",
  "rustls-pki-types",
  "untrusted",
+]
+
+[[package]]
+name = "rutabaga"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "bitcoinkernel",
+ "clap",
 ]
 
 [[package]]

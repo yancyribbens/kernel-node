@@ -1,14 +1,13 @@
 use std::path::PathBuf;
 
 use bitcoin::hex::FromHex;
-use bitcoin::secp256k1::{rand::rngs::OsRng, Secp256k1, SecretKey, XOnlyPublicKey};
 use clap::Parser;
 use kernel_node::ext::DirnameExt;
 use kernel_node::server_capnp::server;
 use tokio::net::UnixStream;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use wallet::io::FileExt;
-use wallet::silentpayments::{SilentPaymentKeysFile, SpendKey};
+//use wallet::io::FileExt;
+//use wallet::silentpayments::{SilentPaymentKeysFile, SpendKey};
 
 const DEFAULT_DATA_DIR: &str = "~/.kernel-node/";
 
@@ -114,13 +113,13 @@ enum WalletCmd {
     },
 }
 
-fn generate_keys() -> (SecretKey, SecretKey, XOnlyPublicKey) {
-    let secp = Secp256k1::new();
-    let scan_priv = SecretKey::new(&mut OsRng);
-    let spend_priv = SecretKey::new(&mut OsRng);
-    let (spend_xonly, _) = spend_priv.public_key(&secp).x_only_public_key();
-    (scan_priv, spend_priv, spend_xonly)
-}
+//fn generate_keys() -> (SecretKey, SecretKey, XOnlyPublicKey) {
+    //let secp = Secp256k1::new();
+    //let scan_priv = SecretKey::new(&mut OsRng);
+    //let spend_priv = SecretKey::new(&mut OsRng);
+    //let (spend_xonly, _) = spend_priv.public_key(&secp).x_only_public_key();
+    //(scan_priv, spend_priv, spend_xonly)
+//}
 
 async fn connect_server(datadir_path: &str) -> server::Client {
     let sock_file = datadir_path.to_owned() + "/node.sock";
@@ -145,36 +144,36 @@ async fn connect_server(datadir_path: &str) -> server::Client {
 fn main() {
     let cli = Args::parse();
 
-    if let Commands::Wallet(WalletCmd::GenerateKeys { out }) = &cli.commands {
-        let (scan_priv, spend_priv, spend_pub) = generate_keys();
-        match out {
-            Some(path) => {
-                let file = SilentPaymentKeysFile::new(scan_priv, SpendKey::Secret(spend_priv));
-                file.save(path).expect("failed to write keys file");
-                println!("Wrote silent payment keys to {}", path.display());
-                println!("spend_pub={}", spend_pub);
-            }
-            None => {
-                eprintln!("WARNING: scan_key and spend_priv must be kept secret — anyone with them can spend received funds.");
-                println!("scan_key={}", scan_priv.display_secret());
-                println!("spend_priv={}", spend_priv.display_secret());
-                println!("spend_pub={}", spend_pub);
-            }
-        }
-        return;
-    }
+    //if let Commands::Wallet(WalletCmd::GenerateKeys { out }) = &cli.commands {
+        //let (scan_priv, spend_priv, spend_pub) = generate_keys();
+        //match out {
+            //Some(path) => {
+                //let file = SilentPaymentKeysFile::new(scan_priv, SpendKey::Secret(spend_priv));
+                //file.save(path).expect("failed to write keys file");
+                //println!("Wrote silent payment keys to {}", path.display());
+                //println!("spend_pub={}", spend_pub);
+            //}
+            //None => {
+                //eprintln!("WARNING: scan_key and spend_priv must be kept secret — anyone with them can spend received funds.");
+                //println!("scan_key={}", scan_priv.display_secret());
+                //println!("spend_priv={}", spend_priv.display_secret());
+                //println!("spend_pub={}", spend_pub);
+            //}
+        //}
+        //return;
+    //}
 
-    if let Commands::Wallet(WalletCmd::PrintKeysFromKeysFile { path }) = &cli.commands {
-        let read = SilentPaymentKeysFile::load(path)
-            .expect("file path provided should be readable as a silent payments keys file");
+    //if let Commands::Wallet(WalletCmd::PrintKeysFromKeysFile { path }) = &cli.commands {
+        //let read = SilentPaymentKeysFile::load(path)
+            //.expect("file path provided should be readable as a silent payments keys file");
 
-        let spend_pub = read.spend_xonly();
-        eprintln!("spend_pub={}", spend_pub);
+        //let spend_pub = read.spend_xonly();
+        //eprintln!("spend_pub={}", spend_pub);
 
-        let scan_priv = read.scan_key();
-        eprintln!("scan_key={}", scan_priv.display_secret());
-        return;
-    }
+        //let scan_priv = read.scan_key();
+        //eprintln!("scan_key={}", scan_priv.display_secret());
+        //return;
+    //}
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
